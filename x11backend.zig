@@ -1,5 +1,6 @@
 const builtin = @import("builtin");
 const std = @import("std");
+const Input = @import("Input.zig");
 const x = @import("x");
 const common = @import("x11common.zig");
 const ContiguousReadBuffer = x.ContiguousReadBuffer;
@@ -16,6 +17,53 @@ pub const Ids = struct {
 
 var gpa_instance = std.heap.GeneralPurposeAllocator(.{}){};
 const gpa = gpa_instance.allocator();
+
+const global = struct {
+    pub var window_content_size = XY(u16){ .x = 400, .y = 400 };
+    pub var input = Input{ };
+    pub var cursor_pos = XY(u16){ .x = 0, .y = 0 };
+};
+
+fn x11Key(set: x.Charset, code: u8) ?Input.Key {
+    return switch (set) {
+        .latin1 => switch (code) {
+            @intFromEnum(x.charset.Latin1.a) => .a,
+            @intFromEnum(x.charset.Latin1.b) => .b,
+            @intFromEnum(x.charset.Latin1.c) => .c,
+            @intFromEnum(x.charset.Latin1.d) => .d,
+            @intFromEnum(x.charset.Latin1.e) => .e,
+            @intFromEnum(x.charset.Latin1.f) => .f,
+            @intFromEnum(x.charset.Latin1.g) => .g,
+            @intFromEnum(x.charset.Latin1.h) => .h,
+            @intFromEnum(x.charset.Latin1.i) => .i,
+            @intFromEnum(x.charset.Latin1.j) => .j,
+            @intFromEnum(x.charset.Latin1.k) => .k,
+            @intFromEnum(x.charset.Latin1.l) => .l,
+            @intFromEnum(x.charset.Latin1.m) => .m,
+            @intFromEnum(x.charset.Latin1.n) => .n,
+            @intFromEnum(x.charset.Latin1.o) => .o,
+            @intFromEnum(x.charset.Latin1.p) => .p,
+            @intFromEnum(x.charset.Latin1.q) => .q,
+            @intFromEnum(x.charset.Latin1.r) => .r,
+            @intFromEnum(x.charset.Latin1.s) => .s,
+            @intFromEnum(x.charset.Latin1.t) => .t,
+            @intFromEnum(x.charset.Latin1.u) => .u,
+            @intFromEnum(x.charset.Latin1.v) => .v,
+            @intFromEnum(x.charset.Latin1.w) => .w,
+            @intFromEnum(x.charset.Latin1.x) => .x,
+            @intFromEnum(x.charset.Latin1.y) => .y,
+            @intFromEnum(x.charset.Latin1.z) => .z,
+            else => null,
+        },
+        .keyboard => switch (code) {
+            @intFromEnum(x.charset.Keyboard.left_control) => .control,
+            @intFromEnum(x.charset.Keyboard.right_control) => .control,
+            else => null,
+        },
+        else => null,
+    };
+}
+
 
 pub fn go() !void {
     try x.wsaStartup();
@@ -50,7 +98,7 @@ pub fn go() !void {
     // TODO: maybe need to call conn.setup.verify or something?
 
 
-    //var keycode_map = std.AutoHashMapUnmanaged(u8, u16){};
+    var keycode_map = std.AutoHashMapUnmanaged(u8, Input.Key){};
     {
         const keymap = try x.keymap.request(gpa, conn.sock, conn.setup.fixed().*);
         defer keymap.deinit(gpa);
@@ -64,14 +112,35 @@ pub fn go() !void {
                 while (j < keymap.syms_per_code) : (j += 1) {
                     const sym = keymap.syms[sym_offset];
                     if (sym == 0) {
-                        std.log.info("{}-{}: nothing", .{keycode, j});
+                        //std.log.info("{}-{}: nothing", .{keycode, j});
                     } else {
                         const set_u8: u8 = @intCast((sym >> 8) & 0xff);
                         const set_opt: ?x.Charset = x.Charset.fromInt(set_u8);
                         const code: u8 = @intCast(sym & 0xff);
                         const set_name = if (set_opt) |set| @tagName(set) else "?";
                         const code_name = if (set_opt) |set| getCodeName(set, code) orelse "?" else "?";
-                        std.log.info("{}-{}: 0x{x} set {s}({}) code {s}({})", .{keycode, j, sym, set_name, set_u8, code_name, code});
+                        //std.log.info("{}-{}: 0x{x} set {s}({}) code {s}({})", .{keycode, j, sym, set_name, set_u8, code_name, code});
+
+                        if (set_opt) |set| {
+                            if (x11Key(set, code)) |key| {
+                                std.log.info("keycode {}: set {s}({}) code {s}({}) key {s}", .{
+                                    keycode,
+                                    set_name,
+                                    set_u8,
+                                    code_name,
+                                    code,
+                                    @tagName(key),
+                                });
+                                const entry = try keycode_map.getOrPut(gpa, keycode);
+                                if (entry.found_existing) {
+                                    if (entry.value_ptr.* != key) {
+                                        std.debug.panic("keycode {} maps to muliple keys? {s} and {s}", .{keycode, @tagName(entry.value_ptr.*), @tagName(key)});
+                                    }
+                                } else {
+                                    entry.value_ptr.* = key;
+                                }
+                            }
+                        }
                     }
                     sym_offset += 1;
                 }
@@ -87,8 +156,8 @@ pub fn go() !void {
             .parent_window_id = screen.root,
             .depth = 0, // we don't care, just inherit from the parent
             .x = 0, .y = 0,
-            .width = 400,
-            .height = 400,
+            .width = global.window_content_size.x,
+            .height = global.window_content_size.y,
             .border_width = 0, // TODO: what is this?
             .class = .input_output,
             .visual_id = screen.root_visual,
@@ -218,9 +287,19 @@ pub fn go() !void {
                 },
                 .key_press => |msg| {
                     std.log.info("key_press: keycode={}", .{msg.keycode});
+                    if (keycode_map.get(msg.keycode)) |key| {
+                        if (global.input.setKeyState(key, .down)) |action| {
+                            try handleAction(conn.sock, ids, font_dims, action);
+                        }
+                    }
                 },
                 .key_release => |msg| {
                     std.log.info("key_release: keycode={}", .{msg.keycode});
+                    if (keycode_map.get(msg.keycode)) |key| {
+                        if (global.input.setKeyState(key, .up)) |action| {
+                            try handleAction(conn.sock, ids, font_dims, action);
+                        }
+                    }
                 },
                 .button_press => |msg| {
                     std.log.info("button_press: {}", .{msg});
@@ -267,6 +346,48 @@ pub fn go() !void {
     }
 }
 
+fn handleAction(
+    sock: std.os.socket_t,
+    ids: Ids,
+    font_dims: FontDims,
+    action: Input.Action,
+) !void {
+    std.log.info("Action: {s}", .{@tagName(action)});
+    switch (action) {
+        .cursor_back => {
+            if (global.cursor_pos.x == 0) {
+                std.log.info("TODO: implement cursor back wrap", .{});
+            } else {
+                global.cursor_pos.x -= 1;
+                try render(sock, ids, font_dims);
+            }
+        },
+        .cursor_forward => {
+            global.cursor_pos.x += 1;
+            try render(sock, ids, font_dims);
+        },
+        .cursor_up => {
+            if (global.cursor_pos.y == 0) {
+                std.log.info("TODO: implement cursor up scroll", .{});
+            } else {
+                global.cursor_pos.y -= 1;
+                try render(sock, ids, font_dims);
+            }
+        },
+        .cursor_down => {
+            global.cursor_pos.y += 1;
+            try render(sock, ids, font_dims);
+        },
+        .cursor_line_start => {},
+        .cursor_line_end => {},
+        .open_file => {},
+        .exit => {
+            std.log.info("TODO: should we check if there are unsaved changes before exiting?", .{});
+            std.os.exit(0);
+        },
+    }
+}
+
 
 const FontDims = struct {
     width: u8,
@@ -280,9 +401,33 @@ fn render(
     ids: Ids,
     font_dims: FontDims,
 ) !void {
-    _ = sock;
-    _ = ids;
-    _ = font_dims;
+    {
+        var msg: [x.clear_area.len]u8 = undefined;
+        x.clear_area.serialize(&msg, false, ids.window(), .{
+            .x = 0, .y = 0, .width = global.window_content_size.x, .height = global.window_content_size.y,
+        });
+        try common.send(sock, &msg);
+    }
+
+
+    {
+        const cursor_pos: XY(i16) = .{
+            .x = @intCast(global.cursor_pos.x * font_dims.width),
+            .y = @intCast(global.cursor_pos.y * font_dims.height),
+        };
+
+        var msg: [x.poly_fill_rectangle.getLen(1)]u8 = undefined;
+        x.poly_fill_rectangle.serialize(&msg, .{
+            .drawable_id = ids.window(),
+            .gc_id = ids.fg_gc(),
+        }, &[_]x.Rectangle {
+            .{
+                .x = cursor_pos.x, .y = cursor_pos.y,
+                .width = font_dims.width, .height = font_dims.height,
+            },
+        });
+        try common.send(sock, &msg);
+    }
 }
 
 fn getCodeName(set: x.Charset, code: u8) ?[]const u8 {
