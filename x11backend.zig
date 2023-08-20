@@ -14,6 +14,9 @@ pub const Ids = struct {
     pub fn pixmap(self: Ids) u32 { return self.base + 2; }
 };
 
+var gpa_instance = std.heap.GeneralPurposeAllocator(.{}){};
+const gpa = gpa_instance.allocator();
+
 pub fn go() !void {
     try x.wsaStartup();
 
@@ -45,6 +48,37 @@ pub fn go() !void {
     }
 
     // TODO: maybe need to call conn.setup.verify or something?
+
+
+    //var keycode_map = std.AutoHashMapUnmanaged(u8, u16){};
+    {
+        const keymap = try x.keymap.request(gpa, conn.sock, conn.setup.fixed().*);
+        defer keymap.deinit(gpa);
+        std.log.info("Keymap: syms_per_code={} total_syms={}", .{keymap.syms_per_code, keymap.syms.len});
+        {
+            var i: usize = 0;
+            var sym_offset: usize = 0;
+            while (i < keymap.keycode_count) : (i += 1) {
+                const keycode: u8 = @intCast(conn.setup.fixed().min_keycode + i);
+                var j: usize = 0;
+                while (j < keymap.syms_per_code) : (j += 1) {
+                    const sym = keymap.syms[sym_offset];
+                    if (sym == 0) {
+                        std.log.info("{}-{}: nothing", .{keycode, j});
+                    } else {
+                        const set_u8: u8 = @intCast((sym >> 8) & 0xff);
+                        const set_opt: ?x.Charset = x.Charset.fromInt(set_u8);
+                        const code: u8 = @intCast(sym & 0xff);
+                        const set_name = if (set_opt) |set| @tagName(set) else "?";
+                        const code_name = if (set_opt) |set| getCodeName(set, code) orelse "?" else "?";
+                        std.log.info("{}-{}: 0x{x} set {s}({}) code {s}({})", .{keycode, j, sym, set_name, set_u8, code_name, code});
+                    }
+                    sym_offset += 1;
+                }
+            }
+        }
+    }
+
 
     {
         var msg_buf: [x.create_window.max_len]u8 = undefined;
@@ -233,6 +267,7 @@ pub fn go() !void {
     }
 }
 
+
 const FontDims = struct {
     width: u8,
     height: u8,
@@ -248,4 +283,19 @@ fn render(
     _ = sock;
     _ = ids;
     _ = font_dims;
+}
+
+fn getCodeName(set: x.Charset, code: u8) ?[]const u8 {
+    switch (set) {
+        inline else => |set_ct| {
+            const Enum = set_ct.Enum();
+            return std.enums.tagName(Enum, enumFromInt(Enum, code) orelse return null);
+        },
+    }
+}
+
+pub fn enumFromInt(comptime E: type, value: @typeInfo(E).Enum.tag_type) ?E {
+    return inline for (@typeInfo(E).Enum.fields) |f| {
+        if (value == f.value) break @enumFromInt(f.value);
+    } else null;
 }
