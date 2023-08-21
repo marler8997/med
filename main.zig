@@ -70,7 +70,7 @@ pub fn main() !u8 {
     if (builtin.os.tag == .windows) {
         if (build_options.enable_x11_backend) {
             if (cmdline_opt.x11) {
-                try x11backend.go(arena.allocator());
+                try x11backend.go();
                 return 0;
             }
         }

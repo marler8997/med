@@ -32,6 +32,7 @@ fn getState(self: *Input, key: Key) *KeyState {
 }
 
 pub fn setKeyState(self: *Input, key: Key, state: KeyState) ?Action {
+    if (self.getState(key).* == state) return null;
     self.getState(key).* = state;
     if (state == .down) {
         switch (key) {
@@ -108,9 +109,9 @@ pub fn setKeyState(self: *Input, key: Key, state: KeyState) ?Action {
             },
             else => {},
         }
-        
-        
+
+
     }
-    
+
     return null;
 }
