@@ -30,6 +30,7 @@ pub fn build(b: *std.build.Builder) void {
         .root_source_file = .{ .path = "main.zig" },
         .target = target,
         .optimize = optimize,
+        .single_threaded = true,
     });
     exe.addOptions("build_options", build_options);
 
