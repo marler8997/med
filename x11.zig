@@ -32,6 +32,8 @@ fn x11Key(set: x.Charset, code: u8) ?Input.Key {
     return switch (set) {
         .latin1 => switch (code) {
             @intFromEnum(x.charset.Latin1.space) => .space,
+            @intFromEnum(x.charset.Latin1.period) => .period,
+            @intFromEnum(x.charset.Latin1.slash) => .forward_slash,
             @intFromEnum(x.charset.Latin1.a) => .a,
             @intFromEnum(x.charset.Latin1.b) => .b,
             @intFromEnum(x.charset.Latin1.c) => .c,

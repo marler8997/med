@@ -156,6 +156,8 @@ fn vkToKey(vk: u8) ?Input.Key {
         @intFromEnum(win32.VK_CONTROL) => .control,
         @intFromEnum(win32.VK_SPACE) => .space,
         'A'...'Z' => @enumFromInt(@intFromEnum(Input.Key.a) + (vk - 'A')),
+        @intFromEnum(win32.VK_OEM_PERIOD) => .period,
+        @intFromEnum(win32.VK_OEM_2) => .forward_slash,
         else => null,
     };
 }
@@ -165,7 +167,7 @@ fn wmKey(wParam: win32.WPARAM, state: Input.KeyState) void {
         std.log.info("{s} {s}", .{@tagName(key), @tagName(state)});
         engine.notifyKeyEvent(key, state);
     } else {
-        std.log.info("unhandled vkey {} {s}", .{wParam, @tagName(state)});
+        std.log.info("unhandled vkey {}(0x{0x}) {s}", .{wParam, @tagName(state)});
     }
 }
 
