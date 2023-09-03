@@ -3,6 +3,7 @@ const Input = @This();
 const std = @import("std");
 
 pub const Action = union(enum) {
+    add_char: u8,
     cursor_back,
     cursor_forward,
     cursor_up,
@@ -39,14 +40,18 @@ pub fn setKeyState(self: *Input, key: Key, state: KeyState) ?Action {
         key_state_ptr.* = state;
     }
     if (state == .down) {
-        switch (key) {
+        if (self.getState(.control).* == .down) {
+            return self.onKeyDownWithControlDown(key);
+        } else switch (key) {
             .control => {
                 self.control_sequence_len = 0;
             },
-            else => {},
-        }
-        if (self.getState(.control).* == .down) {
-            return self.onKeyDownWithControlDown(key);
+            .a, .b, .c, .d, .e, .f, .g, .h, .i, .j, .k, .l, .m,
+            .n, .o, .p, .q, .r, .s, .t, .u, .v, .w, .x, .y, .z,
+            => |c| {
+                const offset: u8 = @intFromEnum(c) - @intFromEnum(Key.a);
+                return Action{ .add_char = 'a' + offset };
+            },
         }
     } else {
         switch (key) {

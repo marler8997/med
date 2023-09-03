@@ -7,6 +7,7 @@ const XY = @import("xy.zig").XY;
 
 const global = struct {
     pub var input: Input = .{};
+    pub var opening_file = false;
 };
 
 // ================================================================================
@@ -28,6 +29,20 @@ pub fn notifyKeyEvent(key: Input.Key, state: Input.KeyState) void {
 
 fn handleAction(action: Input.Action) void {
     switch (action) {
+        .add_char => |ascii_code| {
+            if (global_render.cursor_pos) |cursor_pos| {
+                if (cursor_pos.x >= global_render.size.x) {
+                    std.log.info("todo: handle add_char '{c}' with cursor x out-of-bounds", .{ascii_code});
+                } else if (cursor_pos.y >= global_render.size.y) {
+                    std.log.info("todo: handle add_char '{c}' with cursor y out-of-bounds", .{ascii_code});
+                } else {
+                    global_render.rows[cursor_pos.y][cursor_pos.x] = ascii_code;
+                    std.log.warn("TODO: shift the contents", .{});
+                    // TODO: tell renderModified more specifically what changed
+                    platform.renderModified();
+                }
+            }
+        },
         .cursor_back => {
             if (global_render.cursor_pos) |*cursor_pos| {
                 if (cursor_pos.x == 0) {
@@ -63,19 +78,22 @@ fn handleAction(action: Input.Action) void {
         .cursor_line_start => std.log.info("TODO: implement cursor_line_start", .{}),
         .cursor_line_end => std.log.info("TODO: implement cursor_line_end", .{}),
         .open_file => {
-            updateRenderSize(.{ .x = 100, .y = 2 });
-            const prompt = "Open File:";
-            @memcpy(global_render.rows[0], prompt);
-            @memset(global_render.rows[0][prompt.len..global_render.size.x], ' ');
+            if (!global.opening_file) {
+                global.opening_file = true;
+                updateRenderSize(.{ .x = 100, .y = 2 });
+                const prompt = "Open File:";
+                @memcpy(global_render.rows[0], prompt);
+                @memset(global_render.rows[0][prompt.len..global_render.size.x], ' ');
 
-            const path_buf = global_render.rows[1][0 .. global_render.size.x];
-            // TODO: handle errors
-            const path = std.os.getcwd(path_buf) catch |e| std.debug.panic("todo handle '{s}'", .{@errorName(e)});
-            if (path.len + 1 >= global_render.size.x) @panic("handle long cwd");
-            global_render.rows[1][path.len] = std.fs.path.sep;
-            global_render.cursor_pos = .{ .x = @intCast(path.len + 1), .y = 1 };
-            @memset(global_render.rows[1][path.len + 1..global_render.size.x], ' ');
-            platform.renderModified();
+                const path_buf = global_render.rows[1][0 .. global_render.size.x];
+                // TODO: handle errors
+                const path = std.os.getcwd(path_buf) catch |e| std.debug.panic("todo handle '{s}'", .{@errorName(e)});
+                if (path.len + 1 >= global_render.size.x) @panic("handle long cwd");
+                global_render.rows[1][path.len] = std.fs.path.sep;
+                global_render.cursor_pos = .{ .x = @intCast(path.len + 1), .y = 1 };
+                @memset(global_render.rows[1][path.len + 1..global_render.size.x], ' ');
+                platform.renderModified();
+            }
         },
         .quit => platform.quit(),
     }
