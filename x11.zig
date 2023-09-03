@@ -1,7 +1,10 @@
 const builtin = @import("builtin");
 const std = @import("std");
-const Input = @import("Input.zig");
 const x = @import("x");
+
+const CmdlineOpt = @import("CmdlineOpt.zig");
+const Input = @import("Input.zig");
+const engine = @import("engine.zig");
 const common = @import("x11common.zig");
 const ContiguousReadBuffer = x.ContiguousReadBuffer;
 const XY = @import("xy.zig").XY;
@@ -19,9 +22,10 @@ var gpa_instance = std.heap.GeneralPurposeAllocator(.{}){};
 const gpa = gpa_instance.allocator();
 
 const global = struct {
+    pub var sock: std.os.socket_t = undefined;
+    pub var ids: Ids = undefined;
+    pub var font_dims: FontDims = undefined;
     pub var window_content_size = XY(u16){ .x = 400, .y = 400 };
-    pub var input = Input{ };
-    pub var cursor_pos = XY(u16){ .x = 0, .y = 0 };
 };
 
 fn x11Key(set: x.Charset, code: u8) ?Input.Key {
@@ -64,8 +68,9 @@ fn x11Key(set: x.Charset, code: u8) ?Input.Key {
     };
 }
 
+pub fn go(cmdline_opt: CmdlineOpt) !void {
+    _ = cmdline_opt;
 
-pub fn go() !void {
     try x.wsaStartup();
 
     var arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -76,12 +81,13 @@ pub fn go() !void {
         std.os.shutdown(conn.sock, .both) catch {};
         conn.setup.deinit(arena);
     }
+    global.sock = conn.sock;
 
     const fixed = conn.setup.fixed();
     inline for (@typeInfo(@TypeOf(fixed.*)).Struct.fields) |field| {
         std.log.debug("{s}: {any}", .{field.name, @field(fixed, field.name)});
     }
-    const ids = Ids{ .base = conn.setup.fixed().resource_id_base };
+    global.ids = Ids{ .base = conn.setup.fixed().resource_id_base };
     std.log.debug("vendor: {s}", .{try conn.setup.getVendorSlice(fixed.vendor_len)});
     const format_list_offset = x.ConnectSetup.getFormatListOffset(fixed.vendor_len);
     const format_list_limit = x.ConnectSetup.getFormatListLimit(format_list_offset, fixed.format_count);
@@ -152,7 +158,7 @@ pub fn go() !void {
     {
         var msg_buf: [x.create_window.max_len]u8 = undefined;
         const len = x.create_window.serialize(&msg_buf, .{
-            .window_id = ids.window(),
+            .window_id = global.ids.window(),
             .parent_window_id = screen.root,
             .depth = 0, // we don't care, just inherit from the parent
             .x = 0, .y = 0,
@@ -200,7 +206,7 @@ pub fn go() !void {
     {
         var msg_buf: [x.create_gc.max_len]u8 = undefined;
         const len = x.create_gc.serialize(&msg_buf, .{
-            .gc_id = ids.fg_gc(),
+            .gc_id = global.ids.fg_gc(),
             .drawable_id = screen.root,
             }, .{
             .background = screen.black_pixel,
@@ -216,7 +222,7 @@ pub fn go() !void {
         const text_literal = [_]u16 { 'm' };
         const text = x.Slice(u16, [*]const u16) { .ptr = &text_literal, .len = text_literal.len };
         var msg: [x.query_text_extents.getLen(text.len)]u8 = undefined;
-        x.query_text_extents.serialize(&msg, ids.fg_gc(), text);
+        x.query_text_extents.serialize(&msg, global.ids.fg_gc(), text);
         try conn.send(&msg);
     }
 
@@ -228,7 +234,7 @@ pub fn go() !void {
     std.log.info("read buffer capacity is {}", .{double_buf.half_len});
     var buf = double_buf.contiguousReadBuffer();
 
-    const font_dims: FontDims = blk: {
+    global.font_dims = blk: {
         _ = try x.readOneMsg(conn.reader(), @alignCast(buf.nextReadBuffer()));
         switch (x.serverMsgTaggedUnion(@alignCast(buf.double_buffer_ptr))) {
             .reply => |msg_reply| {
@@ -249,7 +255,7 @@ pub fn go() !void {
 
     {
         var msg: [x.map_window.len]u8 = undefined;
-        x.map_window.serialize(&msg, ids.window());
+        x.map_window.serialize(&msg, global.ids.window());
         try conn.send(&msg);
     }
 
@@ -288,17 +294,13 @@ pub fn go() !void {
                 .key_press => |msg| {
                     std.log.info("key_press: keycode={}", .{msg.keycode});
                     if (keycode_map.get(msg.keycode)) |key| {
-                        if (global.input.setKeyState(key, .down)) |action| {
-                            try handleAction(conn.sock, ids, font_dims, action);
-                        }
+                        engine.notifyKeyEvent(key, .down);
                     }
                 },
                 .key_release => |msg| {
                     std.log.info("key_release: keycode={}", .{msg.keycode});
                     if (keycode_map.get(msg.keycode)) |key| {
-                        if (global.input.setKeyState(key, .up)) |action| {
-                            try handleAction(conn.sock, ids, font_dims, action);
-                        }
+                        engine.notifyKeyEvent(key, .up);
                     }
                 },
                 .button_press => |msg| {
@@ -323,11 +325,7 @@ pub fn go() !void {
                 },
                 .expose => |msg| {
                     std.log.info("expose: {}", .{msg});
-                    try render(
-                        conn.sock,
-                        ids,
-                        font_dims,
-                    );
+                    try render();
                 },
                 .mapping_notify => |msg| {
                     std.log.info("mapping_notify: {}", .{msg});
@@ -345,48 +343,63 @@ pub fn go() !void {
         }
     }
 }
-
-fn handleAction(
-    sock: std.os.socket_t,
-    ids: Ids,
-    font_dims: FontDims,
-    action: Input.Action,
-) !void {
-    std.log.info("Action: {s}", .{@tagName(action)});
-    switch (action) {
-        .cursor_back => {
-            if (global.cursor_pos.x == 0) {
-                std.log.info("TODO: implement cursor back wrap", .{});
-            } else {
-                global.cursor_pos.x -= 1;
-                try render(sock, ids, font_dims);
-            }
-        },
-        .cursor_forward => {
-            global.cursor_pos.x += 1;
-            try render(sock, ids, font_dims);
-        },
-        .cursor_up => {
-            if (global.cursor_pos.y == 0) {
-                std.log.info("TODO: implement cursor up scroll", .{});
-            } else {
-                global.cursor_pos.y -= 1;
-                try render(sock, ids, font_dims);
-            }
-        },
-        .cursor_down => {
-            global.cursor_pos.y += 1;
-            try render(sock, ids, font_dims);
-        },
-        .cursor_line_start => {},
-        .cursor_line_end => {},
-        .open_file => {},
-        .exit => {
-            std.log.info("TODO: should we check if there are unsaved changes before exiting?", .{});
-            std.os.exit(0);
-        },
-    }
+// ================================================================================
+// The interface for the engine to use
+// ================================================================================
+pub fn quit() void {
+    std.log.info("TODO: should we check if there are unsaved changes before exiting?", .{});
+    std.os.exit(0);
 }
+pub fn renderModified() void {
+    // TODO: maybe defer the rendering?
+    render() catch |err| std.debug.panic("render failed with error {s}", .{@errorName(err)});
+}
+
+// ================================================================================
+// End of the interface for the engine to use
+// ================================================================================
+
+//fn handleAction(
+//    sock: std.os.socket_t,
+//    ids: Ids,
+//    font_dims: FontDims,
+//    action: Input.Action,
+//) !void {
+//    std.log.info("Action: {s}", .{@tagName(action)});
+//    switch (action) {
+//        .cursor_back => {
+//            if (Med.global.state.cursor_pos.x == 0) {
+//                std.log.info("TODO: implement cursor back wrap", .{});
+//            } else {
+//                Med.global.state.cursor_pos.x -= 1;
+//                try render(sock, ids, font_dims);
+//            }
+//        },
+//        .cursor_forward => {
+//            Med.global.state.cursor_pos.x += 1;
+//            try render(sock, ids, font_dims);
+//        },
+//        .cursor_up => {
+//            if (Med.global.state.cursor_pos.y == 0) {
+//                std.log.info("TODO: implement cursor up scroll", .{});
+//            } else {
+//                Med.global.state.cursor_pos.y -= 1;
+//                try render(sock, ids, font_dims);
+//            }
+//        },
+//        .cursor_down => {
+//            Med.global.state.cursor_pos.y += 1;
+//            try render(sock, ids, font_dims);
+//        },
+//        .cursor_line_start => {},
+//        .cursor_line_end => {},
+//        .open_file => {},
+//        .exit => {
+//            std.log.info("TODO: should we check if there are unsaved changes before exiting?", .{});
+//            std.os.exit(0);
+//        },
+//    }
+//}
 
 
 const FontDims = struct {
@@ -396,37 +409,33 @@ const FontDims = struct {
     font_ascent: i16, // pixels up from the text basepoint to the top of the text
 };
 
-fn render(
-    sock: std.os.socket_t,
-    ids: Ids,
-    font_dims: FontDims,
-) !void {
+fn render() !void {
     {
         var msg: [x.clear_area.len]u8 = undefined;
-        x.clear_area.serialize(&msg, false, ids.window(), .{
+        x.clear_area.serialize(&msg, false, global.ids.window(), .{
             .x = 0, .y = 0, .width = global.window_content_size.x, .height = global.window_content_size.y,
         });
-        try common.send(sock, &msg);
+        try common.send(global.sock, &msg);
     }
 
 
     {
         const cursor_pos: XY(i16) = .{
-            .x = @intCast(global.cursor_pos.x * font_dims.width),
-            .y = @intCast(global.cursor_pos.y * font_dims.height),
+            .x = @intCast(engine.global_render.cursor_pos.x * global.font_dims.width),
+            .y = @intCast(engine.global_render.cursor_pos.y * global.font_dims.height),
         };
 
         var msg: [x.poly_fill_rectangle.getLen(1)]u8 = undefined;
         x.poly_fill_rectangle.serialize(&msg, .{
-            .drawable_id = ids.window(),
-            .gc_id = ids.fg_gc(),
+            .drawable_id = global.ids.window(),
+            .gc_id = global.ids.fg_gc(),
         }, &[_]x.Rectangle {
             .{
                 .x = cursor_pos.x, .y = cursor_pos.y,
-                .width = font_dims.width, .height = font_dims.height,
+                .width = global.font_dims.width, .height = global.font_dims.height,
             },
         });
-        try common.send(sock, &msg);
+        try common.send(global.sock, &msg);
     }
 }
 

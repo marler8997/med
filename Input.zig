@@ -10,7 +10,7 @@ pub const Action = enum {
     cursor_line_start,
     cursor_line_end,
     open_file,
-    exit,
+    quit,
 };
 
 
@@ -84,7 +84,7 @@ pub fn setKeyState(self: *Input, key: Key, state: KeyState) ?Action {
                         .x => switch (self.control_sequence_buf[1]) {
                             .c => {
                                 self.control_sequence_len = 0;
-                                return .exit;
+                                return .quit;
                             },
                             .f => {
                                 self.control_sequence_len = 0;

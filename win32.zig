@@ -1,5 +1,8 @@
 const builtin = @import("builtin");
 const std = @import("std");
+const build_options = @import("build_options");
+const CmdlineOpt = @import("CmdlineOpt.zig");
+const engine = @import("engine.zig");
 
 const Input = @import("Input.zig");
 
@@ -19,17 +22,9 @@ const HWND = win32.HWND;
 
 const XY = @import("xy.zig").XY;
 
-const OpenFileState = struct {
-};
-
-const State = struct {
-    input: Input = .{},
-    cursor_pos: XY(u16) = .{ .x = 0, .y = 0 },
-    open_file_opt: ?OpenFileState = null,
-};
-
 const global = struct {
-    pub var state = State{ };
+    pub var x11: if (build_options.enable_x11_backend) bool else void = undefined;
+    pub var hWnd: win32.HWND = undefined;
 };
 
 pub fn fatal(hWnd: ?win32.HWND, comptime fmt: []const u8, args: anytype) noreturn {
@@ -43,7 +38,14 @@ pub fn fatal(hWnd: ?win32.HWND, comptime fmt: []const u8, args: anytype) noretur
     std.os.exit(0xff);
 }
 
-pub fn go() !void {
+pub fn go(cmdline_opt: CmdlineOpt) !void {
+    if (build_options.enable_x11_backend) {
+        global.x11 = cmdline_opt.x11;
+        if (cmdline_opt.x11) {
+            return @import("x11.zig").go(cmdline_opt);
+        }
+    }
+
     const CLASS_NAME = L("Med");
     const wc = win32.WNDCLASS{
         .style = @enumFromInt(0),
@@ -79,7 +81,7 @@ pub fn go() !void {
         };
     };
 
-    const hwnd = win32.CreateWindowEx(
+    global.hWnd = win32.CreateWindowEx(
         @enumFromInt(0), // Optional window styles.
         CLASS_NAME, // Window class
         // TODO: use the image name in the title if we have one
@@ -96,14 +98,40 @@ pub fn go() !void {
         std.log.err("CreateWindow failed with {}", .{win32.GetLastError()});
         std.os.exit(0xff);
     };
-    _ = win32.ShowWindow(hwnd, win32.SW_SHOW);
-
+    _ = win32.ShowWindow(global.hWnd, win32.SW_SHOW);
     var msg: MSG = undefined;
     while (win32.GetMessage(&msg, null, 0, 0) != 0) {
         _ = win32.TranslateMessage(&msg);
         _ = win32.DispatchMessage(&msg);
     }
 }
+
+// ================================================================================
+// The interface for the engine to use
+// ================================================================================
+pub fn quit() void {
+    if (build_options.enable_x11_backend) {
+        if (global.x11)
+            return @import("x11.zig").quit();
+    }
+
+    // TODO: this message could get lost if we are inside a modal loop I think
+    win32.PostQuitMessage(0);
+}
+pub fn renderModified() void {
+    if (build_options.enable_x11_backend) {
+        if (global.x11)
+            return @import("x11.zig").renderModified();
+    }
+
+    if (win32.TRUE != win32.InvalidateRect(global.hWnd, null, 0))
+        fatal(global.hWnd, "InvalidateRect failed, error={}", .{win32.GetLastError()});
+}
+// ================================================================================
+// End of the interface for the engine to use
+// ================================================================================
+
+
 
 fn vkToKey(vk: u8) ?Input.Key {
     return switch (vk) {
@@ -113,11 +141,10 @@ fn vkToKey(vk: u8) ?Input.Key {
     };
 }
 
-fn wmKey(hWnd: HWND, wParam: win32.WPARAM, state: Input.KeyState) void {
+fn wmKey(wParam: win32.WPARAM, state: Input.KeyState) void {
     if (vkToKey(@intCast(0xff & wParam))) |key| {
         std.log.info("{s} {s}", .{@tagName(key), @tagName(state)});
-        if (global.state.input.setKeyState(key, state)) |action|
-            try handleAction(hWnd, action);
+        engine.notifyKeyEvent(key, state);
     } else {
         std.log.info("unhandled vkey {} {s}", .{wParam, @tagName(state)});
     }
@@ -130,8 +157,8 @@ fn WindowProc(
     lParam: win32.LPARAM,
 ) callconv(std.os.windows.WINAPI) win32.LRESULT {
     switch (uMsg) {
-        win32.WM_KEYDOWN => wmKey(hWnd, wParam, .down),
-        win32.WM_KEYUP => wmKey(hWnd, wParam, .up),
+        win32.WM_KEYDOWN => wmKey(wParam, .down),
+        win32.WM_KEYUP => wmKey(wParam, .up),
         win32.WM_DESTROY => {
             win32.PostQuitMessage(0);
             return 0;
@@ -154,9 +181,10 @@ fn paint(hWnd: HWND) void {
     var ps: win32.PAINTSTRUCT = undefined;
     const hdc = win32.BeginPaint(hWnd, &ps);
 
+    // hbrBackground is null so we draw our own background for now
     _ = win32.FillRect(hdc, &ps.rcPaint, @ptrFromInt(@as(usize, @intFromEnum(win32.COLOR_WINDOW)) + 1));
 
-    if (global.state.open_file_opt) |_| {
+    if (engine.global_render.open_file_opt) |_| {
         const msg = "TODO: show UI to open a file";
         if (0 == win32.TextOutA(hdc, 0, 0, msg, msg.len))
             std.debug.panic("TextOut failed, error={}", .{win32.GetLastError()});
@@ -164,8 +192,8 @@ fn paint(hWnd: HWND) void {
         const FONT_WIDTH = 12;
         const FONT_HEIGHT = 20;
         const cursor_pos: XY(i16) = .{
-            .x = @intCast(global.state.cursor_pos.x * FONT_WIDTH),
-            .y = @intCast(global.state.cursor_pos.y * FONT_HEIGHT),
+            .x = @intCast(engine.global_render.cursor_pos.x * FONT_WIDTH),
+            .y = @intCast(engine.global_render.cursor_pos.y * FONT_HEIGHT),
         };
         const rect = win32.RECT{
             .left = cursor_pos.x,
@@ -178,45 +206,6 @@ fn paint(hWnd: HWND) void {
     _ = win32.EndPaint(hWnd, &ps);
 }
 
-fn handleAction(
-    hWnd: HWND,
-    action: Input.Action,
-) !void {
-    switch (action) {
-        .cursor_back => {
-            if (global.state.cursor_pos.x == 0) {
-                std.log.info("TODO: implement cursor back wrap", .{});
-            } else {
-                global.state.cursor_pos.x -= 1;
-                invalidate(hWnd);
-            }
-        },
-        .cursor_forward => {
-            global.state.cursor_pos.x += 1;
-            invalidate(hWnd);
-        },
-        .cursor_up => {
-            if (global.state.cursor_pos.y == 0) {
-                std.log.info("TODO: implement cursor up scroll", .{});
-            } else {
-                global.state.cursor_pos.y -= 1;
-                invalidate(hWnd);
-            }
-        },
-        .cursor_down => {
-            global.state.cursor_pos.y += 1;
-            invalidate(hWnd);
-        },
-        .cursor_line_start => std.log.info("TODO: implement cursor_line_start", .{}),
-        .cursor_line_end => std.log.info("TODO: implement cursor_line_end", .{}),
-        .open_file => {
-            global.state.open_file_opt = .{};
-            invalidate(hWnd);
-        },
-        .exit => win32.PostQuitMessage(0),
-    }
-}
-
 fn getClientSize(hWnd: HWND) XY(i32) {
     var rect: win32.RECT = undefined;
     if (0 == win32.GetClientRect(hWnd, &rect))
@@ -225,9 +214,4 @@ fn getClientSize(hWnd: HWND) XY(i32) {
         .x = rect.right - rect.left,
         .y = rect.bottom - rect.top,
     };
-}
-
-fn invalidate(hWnd: HWND) void {
-    if (win32.TRUE != win32.InvalidateRect(hWnd, null, 0))
-        fatal(hWnd, "InvalidateRect failed, error={}", .{win32.GetLastError()});
 }

@@ -2,8 +2,8 @@ const builtin = @import("builtin");
 const std = @import("std");
 const build_options = @import("build_options");
 
-const x11backend = if (build_options.enable_x11_backend) @import("x11backend.zig") else struct {};
-const win32backend = @import("win32backend.zig");
+const CmdlineOpt = @import("CmdlineOpt.zig");
+const platform = @import("platform.zig");
 
 var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 const allocator = arena.allocator();
@@ -13,7 +13,7 @@ pub fn oom(e: error{OutOfMemory}) noreturn {
 }
 pub fn fatal(comptime fmt: []const u8, args: anytype) noreturn {
     if (builtin.os.tag == .windows) {
-        win32backend.fatal(null, fmt, args);
+        @import("win32.zig").fatal(null, fmt, args);
     } else {
         std.log.err(fmt, args);
         std.os.exit(0xff);
@@ -40,10 +40,7 @@ pub fn cmdlineArgs() [][*:0]u8 {
 
 pub fn main() !u8 {
 
-    var cmdline_opt = struct {
-        x11: if (build_options.enable_x11_backend) bool else void =
-            if (build_options.enable_x11_backend) false else {},
-    }{};
+    var cmdline_opt = CmdlineOpt{ };
 
     const args = blk: {
         const all_args = cmdlineArgs();
@@ -67,16 +64,6 @@ pub fn main() !u8 {
     if (args.len != 0)
         fatal("med currently doesn't accept any non-option command-line arguments", .{});
 
-    if (builtin.os.tag == .windows) {
-        if (build_options.enable_x11_backend) {
-            if (cmdline_opt.x11) {
-                try x11backend.go();
-                return 0;
-            }
-        }
-        try win32backend.go();
-    } else {
-        try x11backend.go();
-    }
+    try platform.go(cmdline_opt);
     return 0;
 }
