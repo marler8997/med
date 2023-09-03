@@ -2,7 +2,7 @@ const Input = @This();
 
 const std = @import("std");
 
-pub const Action = enum {
+pub const Action = union(enum) {
     cursor_back,
     cursor_forward,
     cursor_up,
@@ -45,66 +45,8 @@ pub fn setKeyState(self: *Input, key: Key, state: KeyState) ?Action {
             },
             else => {},
         }
-        if (key != .control and self.getState(.control).* == .down) {
-            if (self.control_sequence_len < max_control_sequence) {
-                self.control_sequence_buf[self.control_sequence_len] = key;
-                self.control_sequence_len += 1;
-                switch (self.control_sequence_len) {
-                    0 => unreachable,
-                    1 => switch (self.control_sequence_buf[0]) {
-                        .a => {
-                            self.control_sequence_len = 0;
-                            return .cursor_line_start;
-                        },
-                        .b => {
-                            self.control_sequence_len = 0;
-                            return .cursor_back;
-                        },
-                        .e => {
-                            self.control_sequence_len = 0;
-                            return .cursor_line_end;
-                        },
-                        .f => {
-                            self.control_sequence_len = 0;
-                            return .cursor_forward;
-                        },
-                        .n => {
-                            self.control_sequence_len = 0;
-                            return .cursor_down;
-                        },
-                        .p => {
-                            self.control_sequence_len = 0;
-                            return .cursor_up;
-                        },
-                        .x => {
-                            std.log.info("Ctrl-x-", .{});
-                        },
-                        else => {
-                            std.log.info("Ctrl-{s} unknown", .{@tagName(self.control_sequence_buf[0])});
-                            self.control_sequence_len = max_control_sequence; // disable
-                        },
-                    },
-                    2 => switch (self.control_sequence_buf[0]) {
-                        .x => switch (self.control_sequence_buf[1]) {
-                            .c => {
-                                self.control_sequence_len = 0;
-                                return .quit;
-                            },
-                            .f => {
-                                self.control_sequence_len = 0;
-                                return .open_file;
-                            },
-                            else => {
-                                std.log.info("Ctrl-x-{s} unknown", .{@tagName(self.control_sequence_buf[1])});
-                            },
-                        },
-                        else => {
-                            std.log.info("Ctrl-{s}-{s} unknown", .{@tagName(self.control_sequence_buf[0]), @tagName(self.control_sequence_buf[1])});
-                        },
-                    },
-                    else => unreachable,
-                }
-            }
+        if (self.getState(.control).* == .down) {
+            return self.onKeyDownWithControlDown(key);
         }
     } else {
         switch (key) {
@@ -117,5 +59,70 @@ pub fn setKeyState(self: *Input, key: Key, state: KeyState) ?Action {
 
     }
 
+    return null;
+}
+
+fn onKeyDownWithControlDown(self: *Input, key: Key) ?Action {
+    if (key == .control) return null;
+
+    if (self.control_sequence_len < max_control_sequence) {
+        self.control_sequence_buf[self.control_sequence_len] = key;
+        self.control_sequence_len += 1;
+        switch (self.control_sequence_len) {
+            0 => unreachable,
+            1 => switch (self.control_sequence_buf[0]) {
+                .a => {
+                    self.control_sequence_len = 0;
+                    return .cursor_line_start;
+                },
+                .b => {
+                    self.control_sequence_len = 0;
+                    return .cursor_back;
+                },
+                .e => {
+                    self.control_sequence_len = 0;
+                    return .cursor_line_end;
+                },
+                .f => {
+                    self.control_sequence_len = 0;
+                    return .cursor_forward;
+                },
+                .n => {
+                    self.control_sequence_len = 0;
+                    return .cursor_down;
+                },
+                .p => {
+                    self.control_sequence_len = 0;
+                    return .cursor_up;
+                },
+                .x => {
+                    std.log.info("Ctrl-x-", .{});
+                },
+                else => {
+                    std.log.info("Ctrl-{s} unknown", .{@tagName(self.control_sequence_buf[0])});
+                    self.control_sequence_len = max_control_sequence; // disable
+                },
+            },
+            2 => switch (self.control_sequence_buf[0]) {
+                .x => switch (self.control_sequence_buf[1]) {
+                    .c => {
+                        self.control_sequence_len = 0;
+                        return .quit;
+                    },
+                    .f => {
+                        self.control_sequence_len = 0;
+                        return .open_file;
+                    },
+                    else => {
+                        std.log.info("Ctrl-x-{s} unknown", .{@tagName(self.control_sequence_buf[1])});
+                    },
+                },
+                else => {
+                    std.log.info("Ctrl-{s}-{s} unknown", .{@tagName(self.control_sequence_buf[0]), @tagName(self.control_sequence_buf[1])});
+                },
+            },
+            else => unreachable,
+        }
+    }
     return null;
 }
