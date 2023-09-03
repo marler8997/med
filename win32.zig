@@ -27,13 +27,18 @@ const global = struct {
     pub var hWnd: win32.HWND = undefined;
 };
 
-pub fn fatal(hWnd: ?win32.HWND, comptime fmt: []const u8, args: anytype) noreturn {
+pub fn oom(e: error{OutOfMemory}) noreturn {
+    std.log.err("{s}", .{@errorName(e)});
+    _ = win32.MessageBoxA(null, "Out of memory", "Med Error", win32.MB_OK);
+    std.os.exit(0xff);
+}
+pub fn fatal(comptime fmt: []const u8, args: anytype) noreturn {
     std.log.err(fmt, args);
     // TODO: detect if there is a console or not, only show message box
     //       if there is not a console
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     const msg = std.fmt.allocPrintZ(arena.allocator(), fmt, args) catch @panic("Out of memory");
-    const result = win32.MessageBoxA(hWnd, msg.ptr, null, win32.MB_OK);
+    const result = win32.MessageBoxA(null, msg.ptr, null, win32.MB_OK);
     std.log.info("MessageBox result is {}", .{result});
     std.os.exit(0xff);
 }
@@ -125,7 +130,7 @@ pub fn renderModified() void {
     }
 
     if (win32.TRUE != win32.InvalidateRect(global.hWnd, null, 0))
-        fatal(global.hWnd, "InvalidateRect failed, error={}", .{win32.GetLastError()});
+        fatal("InvalidateRect failed, error={}", .{win32.GetLastError()});
 }
 // ================================================================================
 // End of the interface for the engine to use
@@ -198,11 +203,11 @@ fn paint(hWnd: HWND) void {
     }
 
     // draw cursor
-    {
-        const x: i16 = @intCast(engine.global_render.cursor_pos.x * FONT_WIDTH);
-        const y: i16 = @intCast(engine.global_render.cursor_pos.y * FONT_HEIGHT);
-        const row_str = engine.global_render.rows[engine.global_render.cursor_pos.y];
-        const char_ptr = row_str + engine.global_render.cursor_pos.x;
+    if (engine.global_render.cursor_pos) |cursor_pos| {
+        const x: i16 = @intCast(cursor_pos.x * FONT_WIDTH);
+        const y: i16 = @intCast(cursor_pos.y * FONT_HEIGHT);
+        const row_str = engine.global_render.rows[cursor_pos.y];
+        const char_ptr = row_str + cursor_pos.x;
         _ = win32.SetBkColor(hdc, 0x00ff0000);
         _ = win32.SetTextColor(hdc, 0x00ffffff);
         _ = win32.TextOutA(hdc, x, y, @ptrCast(char_ptr), 1);

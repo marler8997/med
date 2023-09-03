@@ -434,10 +434,10 @@ fn render() !void {
         try common.send(global.sock, msg_buf[0 .. x.image_text8.getLen(text.len)]);
     }
 
-    {
+    if (engine.global_render.cursor_pos) |cursor_pos_index| {
         const cursor_pos: XY(i16) = .{
-            .x = @intCast(engine.global_render.cursor_pos.x * global.font_dims.width),
-            .y = @intCast(engine.global_render.cursor_pos.y * global.font_dims.height),
+            .x = @intCast(cursor_pos_index.x * global.font_dims.width),
+            .y = @intCast(cursor_pos_index.y * global.font_dims.height),
         };
 
         var msg: [x.poly_fill_rectangle.getLen(1)]u8 = undefined;

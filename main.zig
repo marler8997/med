@@ -4,16 +4,14 @@ const build_options = @import("build_options");
 
 const CmdlineOpt = @import("CmdlineOpt.zig");
 const platform = @import("platform.zig");
+const oom = platform.oom;
 
 var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 const allocator = arena.allocator();
 
-pub fn oom(e: error{OutOfMemory}) noreturn {
-    @panic(@errorName(e));
-}
 pub fn fatal(comptime fmt: []const u8, args: anytype) noreturn {
     if (builtin.os.tag == .windows) {
-        @import("win32.zig").fatal(null, fmt, args);
+        @import("win32.zig").fatal(fmt, args);
     } else {
         std.log.err(fmt, args);
         std.os.exit(0xff);
@@ -68,15 +66,13 @@ pub fn main() !u8 {
     const width = 20;
     const height = 20;
     const engine = @import("engine.zig");
-    engine.global_render.size = .{ .x = width, .y = height };
-    var arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    engine.global_render.rows = (try arena_instance.allocator().alloc([*]u8, height)).ptr;
+    engine.global_render.cursor_pos = .{ .x = 0, .y = 0 };
+    engine.updateRenderSize(.{ .x = width, .y = height });
     for (0 .. height) |y| {
-        const row = try arena_instance.allocator().alloc(u8, width);
+        const row = engine.global_render.rows[y];
         for (0 .. width) |x| {
             row[x] = @intCast('a' + (x % 26));
         }
-        engine.global_render.rows[y] = row.ptr;
     }
 
     try platform.go(cmdline_opt);

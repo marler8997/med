@@ -5,6 +5,7 @@ else
     @import("x11.zig")
 ;
 
+pub const oom = impl.oom;
 pub const go = impl.go;
 
 // ================================================================================
