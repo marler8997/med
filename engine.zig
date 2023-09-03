@@ -106,6 +106,12 @@ fn handleAction(action: Input.Action) void {
                     .array_list_backed => |*al| al,
                 };
 
+                if (al.items.len > cursor_pos.x) {
+                    al.ensureUnusedCapacity(row_allocator, 1) catch |e| oom(e);
+                    const old_len = al.items.len;
+                    al.items.len += 1;
+                    std.mem.copyBackwards(u8, al.items[cursor_pos.x + 1..], al.items[cursor_pos.x..old_len]);
+                }
                 if (cursor_pos.x >= al.items.len) {
                     const needed_len = cursor_pos.x + 1;
                     al.ensureTotalCapacity(row_allocator, needed_len) catch |e| oom(e);
@@ -115,7 +121,6 @@ fn handleAction(action: Input.Action) void {
                         c.* = ' ';
                     }
                 }
-                std.log.warn("TODO: shift the old contents", .{});
                 std.log.info("setting row {} col {} to '{c}'", .{cursor_pos.y, cursor_pos.x, ascii_code});
                 al.items[cursor_pos.x] = ascii_code;
                 cursor_pos.x += 1;
