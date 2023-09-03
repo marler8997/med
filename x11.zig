@@ -68,6 +68,11 @@ fn x11Key(set: x.Charset, code: u8) ?Input.Key {
     };
 }
 
+pub fn oom(e: error{OutOfMemory}) noreturn {
+    std.log.err("{s}", .{@errorName(e)});
+    std.os.exit(0xff);
+}
+
 pub fn go(cmdline_opt: CmdlineOpt) !void {
     _ = cmdline_opt;
 
@@ -252,6 +257,12 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
             },
         }
     };
+    std.log.info("font_dims {}x{} left={} ascent={}", .{
+        global.font_dims.width,
+        global.font_dims.height,
+        global.font_dims.font_left,
+        global.font_dims.font_ascent,
+    });
 
     {
         var msg: [x.map_window.len]u8 = undefined;
@@ -429,7 +440,7 @@ fn render() !void {
             .drawable_id = global.ids.window(),
             .gc_id = global.ids.fg_gc(),
             .x = 0,
-            .y = @intCast(row_index * global.font_dims.height),
+            .y = @as(i16, @intCast(row_index * global.font_dims.height)) + global.font_dims.font_ascent,
         });
         try common.send(global.sock, msg_buf[0 .. x.image_text8.getLen(text.len)]);
     }
