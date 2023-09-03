@@ -31,6 +31,7 @@ const global = struct {
 fn x11Key(set: x.Charset, code: u8) ?Input.Key {
     return switch (set) {
         .latin1 => switch (code) {
+            @intFromEnum(x.charset.Latin1.space) => .space,
             @intFromEnum(x.charset.Latin1.a) => .a,
             @intFromEnum(x.charset.Latin1.b) => .b,
             @intFromEnum(x.charset.Latin1.c) => .c,
@@ -429,20 +430,21 @@ fn render() !void {
         try common.send(global.sock, &msg);
     }
 
-    for (0 .. engine.global_render.size.y) |row_index| {
-        const text = x.Slice(u8, [*]const u8) {
-            .ptr = engine.global_render.rows[row_index],
-            .len = std.math.cast(u8, engine.global_render.size.x)
-                orelse @panic("todo: handle rows longer than 255"),
+    for (engine.global_render.getViewportRows(), 0..) |row, row_index| {
+        const text = row.getViewport(engine.global_render);
+        const text_xslice = x.Slice(u8, [*]const u8) {
+            .ptr = text.ptr,
+            .len = std.math.cast(u8, text.len)
+                orelse @panic("todo: handle viewport row longer than 255"),
         };
         var msg_buf: [x.image_text8.max_len]u8 = undefined;
-        x.image_text8.serialize(&msg_buf, text, .{
+        x.image_text8.serialize(&msg_buf, text_xslice, .{
             .drawable_id = global.ids.window(),
             .gc_id = global.ids.fg_gc(),
             .x = 0,
             .y = @as(i16, @intCast(row_index * global.font_dims.height)) + global.font_dims.font_ascent,
         });
-        try common.send(global.sock, msg_buf[0 .. x.image_text8.getLen(text.len)]);
+        try common.send(global.sock, msg_buf[0 .. x.image_text8.getLen(text_xslice.len)]);
     }
 
     if (engine.global_render.cursor_pos) |cursor_pos_index| {

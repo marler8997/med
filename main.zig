@@ -62,19 +62,6 @@ pub fn main() !u8 {
     if (args.len != 0)
         fatal("med currently doesn't accept any non-option command-line arguments", .{});
 
-    // initialize something for now
-    const width = 20;
-    const height = 20;
-    const engine = @import("engine.zig");
-    engine.global_render.cursor_pos = .{ .x = 0, .y = 0 };
-    engine.updateRenderSize(.{ .x = width, .y = height });
-    for (0 .. height) |y| {
-        const row = engine.global_render.rows[y];
-        for (0 .. width) |x| {
-            row[x] = @intCast('a' + (x % 26));
-        }
-    }
-
     try platform.go(cmdline_opt);
     return 0;
 }

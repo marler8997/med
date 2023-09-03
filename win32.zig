@@ -154,6 +154,7 @@ pub fn renderModified() void {
 fn vkToKey(vk: u8) ?Input.Key {
     return switch (vk) {
         @intFromEnum(win32.VK_CONTROL) => .control,
+        @intFromEnum(win32.VK_SPACE) => .space,
         'A'...'Z' => @enumFromInt(@intFromEnum(Input.Key.a) + (vk - 'A')),
         else => null,
     };
@@ -205,26 +206,37 @@ fn paint(hWnd: HWND) void {
     const FONT_WIDTH = 8;
     const FONT_HEIGHT = 14;
 
+    const viewport_rows = engine.global_render.getViewportRows();
+
     _ = win32.SelectObject(hdc, global.hFont);
     _ = win32.SetBkColor(hdc, 0x00ffffff);
     _ = win32.SetTextColor(hdc, 0x00000000);
-    for (0 .. engine.global_render.size.y) |row_index| {
+    for (viewport_rows, 0..) |row, row_index| {
         const y: i32 = @intCast(row_index * FONT_HEIGHT);
-        const row_str = engine.global_render.rows[row_index];
+        const row_str = row.getViewport(engine.global_render);
         // NOTE: for now we only support ASCII
-        if (0 == win32.TextOutA(hdc, 0, y, @ptrCast(row_str), engine.global_render.size.x))
+        if (0 == win32.TextOutA(hdc, 0, y, @ptrCast(row_str), @intCast(row_str.len)))
             std.debug.panic("TextOut failed, error={}", .{win32.GetLastError()});
     }
 
     // draw cursor
-    if (engine.global_render.cursor_pos) |cursor_pos| {
-        const x: i16 = @intCast(cursor_pos.x * FONT_WIDTH);
-        const y: i16 = @intCast(cursor_pos.y * FONT_HEIGHT);
-        const row_str = engine.global_render.rows[cursor_pos.y];
-        const char_ptr = row_str + cursor_pos.x;
-        _ = win32.SetBkColor(hdc, 0x00ff0000);
-        _ = win32.SetTextColor(hdc, 0x00ffffff);
-        _ = win32.TextOutA(hdc, x, y, @ptrCast(char_ptr), 1);
+    if (engine.global_render.cursor_pos) |cursor_global_pos| {
+        if (engine.global_render.toViewportPos(cursor_global_pos)) |cursor_viewport_pos| {
+            const viewport_pos = XY(i32){
+                .x = @intCast(cursor_viewport_pos.x * FONT_WIDTH),
+                .y = @intCast(cursor_viewport_pos.y * FONT_HEIGHT),
+            };
+            const char_str: []const u8 = blk: {
+                if (cursor_viewport_pos.y >= viewport_rows.len) break :blk " ";
+                const row = &viewport_rows[cursor_viewport_pos.y];
+                const row_str = row.getViewport(engine.global_render);
+                if (cursor_viewport_pos.x >= row_str.len) break :blk " ";
+                break :blk row_str[cursor_viewport_pos.x..];
+            };
+            _ = win32.SetBkColor(hdc, 0x00ff0000);
+            _ = win32.SetTextColor(hdc, 0x00ffffff);
+            _ = win32.TextOutA(hdc, viewport_pos.x, viewport_pos.y, @ptrCast(char_str), 1);
+        }
     }
 
     _ = win32.EndPaint(hWnd, &ps);
