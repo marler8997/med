@@ -7,8 +7,10 @@ const XY = @import("xy.zig").XY;
 
 const global = struct {
     pub var input: Input = .{};
-    pub var opening_file = false;
 };
+
+var row_allocator_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+const row_allocator = row_allocator_instance.allocator();
 
 // ================================================================================
 // The interface for the platform to use
@@ -28,12 +30,21 @@ pub const Row = union(enum) {
         }
     }
 };
+pub const OpenFilePrompt = struct {
+    const max_path_len = 2048;
+    path_buf: [max_path_len]u8 = undefined,
+    path_len: usize,
+    pub fn getPathConst(self: *const OpenFilePrompt) []const u8 {
+        return self.path_buf[0 .. self.path_len];
+    }
+};
 pub const Render = struct {
     cursor_pos: ?XY(u16) = .{ .x = 0, .y = 0 },
     size: XY(u16) = .{ .x = 0, .y = 0 },
     viewport_pos: XY(u32) = .{ .x = 0, .y = 0 },
     viewport_size: XY(u16) = .{ .x = 30, .y = 40 },
     rows: std.ArrayListUnmanaged(Row) = .{},
+    open_file_prompt: ?OpenFilePrompt = null,
 
     pub fn getViewportRows(self: *Render) []Row {
         if (self.viewport_pos.y >= self.rows.items.len) return &[0]Row{ };
@@ -63,6 +74,18 @@ pub fn notifyKeyEvent(key: Input.Key, state: Input.KeyState) void {
 fn handleAction(action: Input.Action) void {
     switch (action) {
         .add_char => |ascii_code| {
+            if (global_render.open_file_prompt) |*prompt| {
+                if (prompt.path_len >= prompt.path_buf.len) {
+                    // beep?
+                    std.log.err("path too long", .{});
+                    return;
+                }
+                prompt.path_buf[prompt.path_len] = ascii_code;
+                prompt.path_len += 1;
+                platform.renderModified();
+                return;
+            }
+
             if (global_render.cursor_pos) |*cursor_pos| {
                 if (cursor_pos.y >= global_render.size.y) {
                     const needed_len = cursor_pos.y + 1;
@@ -99,6 +122,15 @@ fn handleAction(action: Input.Action) void {
                 platform.renderModified();
             }
         },
+        .enter => {
+            if (global_render.open_file_prompt) |*prompt| {
+                openFile(prompt.getPathConst());
+                global_render.open_file_prompt = null;
+                platform.renderModified();
+                return;
+            }
+            std.log.warn("TODO: handle enter", .{});
+        },
         .cursor_back => {
             if (global_render.cursor_pos) |*cursor_pos| {
                 if (cursor_pos.x == 0) {
@@ -134,51 +166,26 @@ fn handleAction(action: Input.Action) void {
         .cursor_line_start => std.log.info("TODO: implement cursor_line_start", .{}),
         .cursor_line_end => std.log.info("TODO: implement cursor_line_end", .{}),
         .open_file => {
-            std.log.warn("TODO: implement open_file", .{});
-//            if (!global.opening_file) {
-//                global.opening_file = true;
-//                updateRenderSize(.{ .x = 100, .y = 2 });
-//                const prompt = "Open File:";
-//                @memcpy(global_render.rows[0], prompt);
-//                @memset(global_render.rows[0][prompt.len..global_render.size.x], ' ');
-//
-//                const path_buf = global_render.rows[1][0 .. global_render.size.x];
-//                // TODO: handle errors
-//                const path = std.os.getcwd(path_buf) catch |e| std.debug.panic("todo handle '{s}'", .{@errorName(e)});
-//                if (path.len + 1 >= global_render.size.x) @panic("handle long cwd");
-//                global_render.rows[1][path.len] = std.fs.path.sep;
-//                global_render.cursor_pos = .{ .x = @intCast(path.len + 1), .y = 1 };
-//                @memset(global_render.rows[1][path.len + 1..global_render.size.x], ' ');
-//                platform.renderModified();
-//            }
+            if (global_render.open_file_prompt == null) {
+                global_render.open_file_prompt = .{ .path_len = 0 };
+                const prompt = &global_render.open_file_prompt.?;
+                const path = std.os.getcwd(&prompt.path_buf) catch |e| std.debug.panic("todo handle '{s}'", .{@errorName(e)});
+                if (path.len + 1 >= prompt.path_buf.len) @panic("handle long cwd");
+                prompt.path_buf[path.len] = std.fs.path.sep;
+                prompt.path_len = path.len + 1;
+                platform.renderModified();
+            }
         },
         .quit => platform.quit(),
     }
 }
 
-pub fn updateRenderSize(size: XY(u16)) void {
-    if (global_render.size.x == size.x and global_render.size.y == size.y)
+fn openFile(filename: []const u8) void {
+    var file = std.fs.cwd().openFile(filename, .{}) catch |err| {
+        std.log.err("openFile '{s}' failed with {s}", .{filename, @errorName(err)});
+        // TODO: set error message to global render
         return;
-    freeRows(global_render.size, global_render.rows);
-    global_render.size = size;
-    global_render.rows = allocRows(size);
-}
-
-var row_allocator_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-const row_allocator = row_allocator_instance.allocator();
-fn allocRows(size: XY(u16)) [*][*]u8 {
-    const rows = row_allocator.alloc([*]u8, size.y) catch |e| platform.oom(e);
-    for (0 .. size.y) |y| {
-        rows[y] = (row_allocator.alloc(u8, size.x) catch |e| platform.oom(e)).ptr;
-    }
-    return rows.ptr;
-}
-fn freeRows(size: XY(u16), rows: [*][*]u8) void {
-    if (size.x == 0 or size.y == 0) return;
-
-    for (0 .. size.y) |y| {
-        // free in reverse order, might be better for arena allocator?
-        row_allocator.free(rows[size.y - y - 1][0 .. size.x]);
-    }
-    row_allocator.free(rows[0 .. size.y]);
+    };
+    defer file.close();
+    std.log.err("TODO: implement openFile '{s}'", .{filename});
 }
