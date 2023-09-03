@@ -4,8 +4,6 @@ const Input = @import("Input.zig");
 const platform = @import("platform.zig");
 const XY = @import("xy.zig").XY;
 
-const OpenFileState = struct {
-};
 const global = struct {
     pub var input: Input = .{};
 };
@@ -15,7 +13,8 @@ const global = struct {
 // ================================================================================
 pub const Render = struct {
     cursor_pos: XY(u16) = .{ .x = 0, .y = 0 },
-    open_file_opt: ?OpenFileState = null,
+    size: XY(u16) = .{ .x = 0, .y = 0 },
+    rows: [*][*]u8 = undefined,
 };
 pub var global_render = Render{ };
 pub fn notifyKeyEvent(key: Input.Key, state: Input.KeyState) void {
@@ -55,8 +54,8 @@ fn handleAction(action: Input.Action) !void {
         .cursor_line_start => std.log.info("TODO: implement cursor_line_start", .{}),
         .cursor_line_end => std.log.info("TODO: implement cursor_line_end", .{}),
         .open_file => {
-            global_render.open_file_opt = .{};
-            platform.renderModified();
+            std.log.info("todo: setup open file UI", .{});
+            //platform.renderModified();
         },
         .quit => platform.quit(),
     }

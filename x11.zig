@@ -418,6 +418,21 @@ fn render() !void {
         try common.send(global.sock, &msg);
     }
 
+    for (0 .. engine.global_render.size.y) |row_index| {
+        const text = x.Slice(u8, [*]const u8) {
+            .ptr = engine.global_render.rows[row_index],
+            .len = std.math.cast(u8, engine.global_render.size.x)
+                orelse @panic("todo: handle rows longer than 255"),
+        };
+        var msg_buf: [x.image_text8.max_len]u8 = undefined;
+        x.image_text8.serialize(&msg_buf, text, .{
+            .drawable_id = global.ids.window(),
+            .gc_id = global.ids.fg_gc(),
+            .x = 0,
+            .y = @intCast(row_index * global.font_dims.height),
+        });
+        try common.send(global.sock, msg_buf[0 .. x.image_text8.getLen(text.len)]);
+    }
 
     {
         const cursor_pos: XY(i16) = .{

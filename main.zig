@@ -64,6 +64,21 @@ pub fn main() !u8 {
     if (args.len != 0)
         fatal("med currently doesn't accept any non-option command-line arguments", .{});
 
+    // initialize something for now
+    const width = 20;
+    const height = 20;
+    const engine = @import("engine.zig");
+    engine.global_render.size = .{ .x = width, .y = height };
+    var arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    engine.global_render.rows = (try arena_instance.allocator().alloc([*]u8, height)).ptr;
+    for (0 .. height) |y| {
+        const row = try arena_instance.allocator().alloc(u8, width);
+        for (0 .. width) |x| {
+            row[x] = @intCast('a' + (x % 26));
+        }
+        engine.global_render.rows[y] = row.ptr;
+    }
+
     try platform.go(cmdline_opt);
     return 0;
 }

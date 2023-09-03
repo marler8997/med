@@ -184,25 +184,30 @@ fn paint(hWnd: HWND) void {
     // hbrBackground is null so we draw our own background for now
     _ = win32.FillRect(hdc, &ps.rcPaint, @ptrFromInt(@as(usize, @intFromEnum(win32.COLOR_WINDOW)) + 1));
 
-    if (engine.global_render.open_file_opt) |_| {
-        const msg = "TODO: show UI to open a file";
-        if (0 == win32.TextOutA(hdc, 0, 0, msg, msg.len))
+    const FONT_WIDTH = 8;
+    const FONT_HEIGHT = 14;
+
+    _ = win32.SetBkColor(hdc, 0x00ffffff);
+    _ = win32.SetTextColor(hdc, 0x00000000);
+    for (0 .. engine.global_render.size.y) |row_index| {
+        const y: i32 = @intCast(row_index * FONT_HEIGHT);
+        const row_str = engine.global_render.rows[row_index];
+        // NOTE: for now we only support ASCII
+        if (0 == win32.TextOutA(hdc, 0, y, @ptrCast(row_str), engine.global_render.size.x))
             std.debug.panic("TextOut failed, error={}", .{win32.GetLastError()});
-    } else {
-        const FONT_WIDTH = 12;
-        const FONT_HEIGHT = 20;
-        const cursor_pos: XY(i16) = .{
-            .x = @intCast(engine.global_render.cursor_pos.x * FONT_WIDTH),
-            .y = @intCast(engine.global_render.cursor_pos.y * FONT_HEIGHT),
-        };
-        const rect = win32.RECT{
-            .left = cursor_pos.x,
-            .top = cursor_pos.y,
-            .right = cursor_pos.x + FONT_WIDTH,
-            .bottom = cursor_pos.y + FONT_HEIGHT,
-        };
-        _ = win32.FillRect(hdc, &rect, @ptrFromInt(@as(usize, @intFromEnum(win32.COLOR_HIGHLIGHT)) + 1));
     }
+
+    // draw cursor
+    {
+        const x: i16 = @intCast(engine.global_render.cursor_pos.x * FONT_WIDTH);
+        const y: i16 = @intCast(engine.global_render.cursor_pos.y * FONT_HEIGHT);
+        const row_str = engine.global_render.rows[engine.global_render.cursor_pos.y];
+        const char_ptr = row_str + engine.global_render.cursor_pos.x;
+        _ = win32.SetBkColor(hdc, 0x00ff0000);
+        _ = win32.SetTextColor(hdc, 0x00ffffff);
+        _ = win32.TextOutA(hdc, x, y, @ptrCast(char_ptr), 1);
+    }
+
     _ = win32.EndPaint(hWnd, &ps);
 }
 
