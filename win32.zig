@@ -24,6 +24,7 @@ const XY = @import("xy.zig").XY;
 
 const global = struct {
     pub var x11: if (build_options.enable_x11_backend) bool else void = undefined;
+    pub var hFont: win32.HFONT = undefined;
     pub var hWnd: win32.HWND = undefined;
 };
 
@@ -85,6 +86,18 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
             .y = client_rect.bottom - client_rect.top,
         };
     };
+
+    global.hFont = win32.CreateFontW(
+        16,0, // height/width
+        0,0, // escapement/orientation
+        win32.FW_NORMAL, // weight
+        0, 0, 0, // italic, underline, strikeout
+        0, // charset
+        .DEFAULT_PRECIS, .DEFAULT_PRECIS, // outprecision, clipprecision
+        .PROOF_QUALITY, // quality
+        .MODERN, // pitch and family
+        L("SYSTEM_FIXED_FONT"), // face name
+    ) orelse fatal("CreateFont failed, error={}", .{win32.GetLastError()});
 
     global.hWnd = win32.CreateWindowEx(
         @enumFromInt(0), // Optional window styles.
@@ -192,6 +205,7 @@ fn paint(hWnd: HWND) void {
     const FONT_WIDTH = 8;
     const FONT_HEIGHT = 14;
 
+    _ = win32.SelectObject(hdc, global.hFont);
     _ = win32.SetBkColor(hdc, 0x00ffffff);
     _ = win32.SetTextColor(hdc, 0x00000000);
     for (0 .. engine.global_render.size.y) |row_index| {
