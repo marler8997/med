@@ -371,49 +371,6 @@ pub fn renderModified() void {
 // End of the interface for the engine to use
 // ================================================================================
 
-//fn handleAction(
-//    sock: std.os.socket_t,
-//    ids: Ids,
-//    font_dims: FontDims,
-//    action: Input.Action,
-//) !void {
-//    std.log.info("Action: {s}", .{@tagName(action)});
-//    switch (action) {
-//        .cursor_back => {
-//            if (Med.global.state.cursor_pos.x == 0) {
-//                std.log.info("TODO: implement cursor back wrap", .{});
-//            } else {
-//                Med.global.state.cursor_pos.x -= 1;
-//                try render(sock, ids, font_dims);
-//            }
-//        },
-//        .cursor_forward => {
-//            Med.global.state.cursor_pos.x += 1;
-//            try render(sock, ids, font_dims);
-//        },
-//        .cursor_up => {
-//            if (Med.global.state.cursor_pos.y == 0) {
-//                std.log.info("TODO: implement cursor up scroll", .{});
-//            } else {
-//                Med.global.state.cursor_pos.y -= 1;
-//                try render(sock, ids, font_dims);
-//            }
-//        },
-//        .cursor_down => {
-//            Med.global.state.cursor_pos.y += 1;
-//            try render(sock, ids, font_dims);
-//        },
-//        .cursor_line_start => {},
-//        .cursor_line_end => {},
-//        .open_file => {},
-//        .exit => {
-//            std.log.info("TODO: should we check if there are unsaved changes before exiting?", .{});
-//            std.os.exit(0);
-//        },
-//    }
-//}
-
-
 const FontDims = struct {
     width: u8,
     height: u8,
