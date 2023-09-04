@@ -39,12 +39,17 @@ pub const OpenFilePrompt = struct {
     }
 };
 pub const Render = struct {
+    const max_error_msg = 400;
+
     cursor_pos: ?XY(u16) = .{ .x = 0, .y = 0 },
     size: XY(u16) = .{ .x = 0, .y = 0 },
     viewport_pos: XY(u32) = .{ .x = 0, .y = 0 },
     viewport_size: XY(u16) = .{ .x = 30, .y = 40 },
     rows: std.ArrayListUnmanaged(Row) = .{},
     open_file_prompt: ?OpenFilePrompt = null,
+
+    error_len: usize = 0,
+    error_buf: [max_error_msg]u8 = undefined,
 
     pub fn getViewportRows(self: *Render) []Row {
         if (self.viewport_pos.y >= self.rows.items.len) return &[0]Row{ };
@@ -60,6 +65,22 @@ pub const Render = struct {
             .x = @intCast(pos.x - self.viewport_pos.x),
             .y = @intCast(pos.y - self.viewport_pos.y),
         };
+    }
+    pub fn getError(self: *Render) ?[]const u8 {
+        if (self.error_len == 0) return null;
+        return self.error_buf[0 .. self.error_len];
+    }
+    pub fn setError(self: *Render, comptime fmt: []const u8, args: anytype) void {
+        self.error_len = (std.fmt.bufPrint(&self.error_buf, fmt, args) catch |e| switch (e) {
+            error.NoSpaceLeft => {
+                std.log.err("the next error is too long to format!", .{});
+                std.log.err(fmt, args);
+                const too_long_msg = "got error but message is too long. (see log)";
+                @memcpy(self.error_buf[0 .. too_long_msg.len], too_long_msg);
+                self.error_len = too_long_msg.len;
+                return;
+            },
+        }).len;
     }
 };
 pub var global_render = Render{ };
@@ -128,6 +149,11 @@ fn handleAction(action: Input.Action) void {
             }
         },
         .enter => {
+            if (global_render.error_len != 0) {
+                global_render.error_len = 0;
+                platform.renderModified();
+                return;
+            }
             if (global_render.open_file_prompt) |*prompt| {
                 openFile(prompt.getPathConst());
                 global_render.open_file_prompt = null;
@@ -194,8 +220,8 @@ fn handleAction(action: Input.Action) void {
 
 fn openFile(filename: []const u8) void {
     var file = std.fs.cwd().openFile(filename, .{}) catch |err| {
-        std.log.err("openFile '{s}' failed with {s}", .{filename, @errorName(err)});
-        // TODO: set error message to global render
+        global_render.setError("openFile '{s}' failed with {s}", .{filename, @errorName(err)});
+        platform.renderModified();
         return;
     };
     defer file.close();

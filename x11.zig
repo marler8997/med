@@ -437,37 +437,37 @@ fn render() !void {
             });
             try common.send(global.sock, &msg);
         }
+        try renderText("Open File:", .{ .x = 0, .y = 0 });
+        try renderText(prompt.getPathConst(), .{ .x = 0, .y = 1 });
+    }
+    if (engine.global_render.getError()) |error_msg| {
         {
-            const text_str = "Open File:";
-            const text_xslice = x.Slice(u8, [*]const u8) {
-                .ptr = text_str.ptr,
-                .len = text_str.len,
-            };
-            var msg: [x.image_text8.getLen(text_str.len)]u8 = undefined;
-            x.image_text8.serialize(&msg, text_xslice, .{
-                .drawable_id = global.ids.window(),
-                .gc_id = global.ids.fg_gc(),
-                .x = 0,
-                .y = global.font_dims.font_ascent,
+            var msg: [x.clear_area.len]u8 = undefined;
+            x.clear_area.serialize(&msg, false, global.ids.window(), .{
+                .x = 0, .y = 0,
+                .width = global.window_content_size.x,
+                .height = global.font_dims.height,
             });
             try common.send(global.sock, &msg);
         }
-        {
-            const text = prompt.getPathConst();
-            const text_xslice = x.Slice(u8, [*]const u8) {
-                .ptr = text.ptr,
-                .len = std.math.cast(u8, text.len) orelse @panic("todo: handle filename longer than 255"),
-            };
-            var msg_buf: [x.image_text8.max_len]u8 = undefined;
-            x.image_text8.serialize(&msg_buf, text_xslice, .{
-                .drawable_id = global.ids.window(),
-                .gc_id = global.ids.fg_gc(),
-                .x = 0,
-                .y = @as(i16, @intCast(1 * global.font_dims.height)) + global.font_dims.font_ascent,
-            });
-            try common.send(global.sock, msg_buf[0 .. x.image_text8.getLen(text_xslice.len)]);
-        }
+        try renderText("Error:", .{ .x = 0, .y = 0 });
+        try renderText(error_msg, .{ .x = 0, .y = 1 });
     }
+}
+
+fn renderText(text: []const u8, pos: XY(u16)) !void {
+    const xslice = x.Slice(u8, [*]const u8) {
+        .ptr = text.ptr,
+        .len = std.math.cast(u8, text.len) orelse @panic("todo: handle render text longer than 255"),
+    };
+    var msg_buf: [x.image_text8.max_len]u8 = undefined;
+    x.image_text8.serialize(&msg_buf, xslice, .{
+        .drawable_id = global.ids.window(),
+        .gc_id = global.ids.fg_gc(),
+        .x = @intCast(pos.x * global.font_dims.width),
+        .y = @as(i16, @intCast(pos.y * global.font_dims.height)) + global.font_dims.font_ascent,
+    });
+    try common.send(global.sock, msg_buf[0 .. x.image_text8.getLen(xslice.len)]);
 }
 
 fn getCodeName(set: x.Charset, code: u8) ?[]const u8 {

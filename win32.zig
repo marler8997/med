@@ -153,6 +153,7 @@ pub fn renderModified() void {
 
 fn vkToKey(vk: u8) ?Input.Key {
     return switch (vk) {
+        @intFromEnum(win32.VK_RETURN) => .enter,
         @intFromEnum(win32.VK_CONTROL) => .control,
         @intFromEnum(win32.VK_SPACE) => .space,
         'A'...'Z' => @enumFromInt(@intFromEnum(Input.Key.a) + (vk - 'A')),
@@ -203,8 +204,12 @@ fn paint(hWnd: HWND) void {
     var ps: win32.PAINTSTRUCT = undefined;
     const hdc = win32.BeginPaint(hWnd, &ps);
 
-    // hbrBackground is null so we draw our own background for now
-    _ = win32.FillRect(hdc, &ps.rcPaint, @ptrFromInt(@as(usize, @intFromEnum(win32.COLOR_WINDOW)) + 1));
+    const client_size = getClientSize(hWnd);
+    {
+        // hbrBackground is null so we draw our own background for now
+        const rect = win32.RECT{ .left = 0, .top = 0, .right = client_size.x, .bottom = client_size.y };
+        _ = win32.FillRect(hdc, &rect, @ptrFromInt(@as(usize, @intFromEnum(win32.COLOR_WINDOW)) + 1));
+    }
 
     const FONT_WIDTH = 8;
     const FONT_HEIGHT = 14;
@@ -242,13 +247,41 @@ fn paint(hWnd: HWND) void {
         }
     }
 
+    if (engine.global_render.open_file_prompt) |*prompt| {
+        const rect = win32.RECT {
+            .left = 0, .top = 0,
+            .right = client_size.x,
+            .bottom = FONT_HEIGHT * 2,
+        };
+        _ = win32.FillRect(hdc, &rect, @ptrFromInt(@as(usize, @intFromEnum(win32.COLOR_WINDOW)) + 1));
+        _ = win32.SetBkColor(hdc, 0x00ffffff);
+        _ = win32.SetTextColor(hdc, 0x00000000);
+        const msg = "Open File:";
+        _ = win32.TextOutA(hdc, 0, 0 * FONT_HEIGHT, msg, msg.len);
+        const path = prompt.getPathConst();
+        _ = win32.TextOutA(hdc, 0, 1 * FONT_HEIGHT, @ptrCast(path.ptr), @intCast(path.len));
+    }
+    if (engine.global_render.getError()) |error_msg| {
+        const rect = win32.RECT {
+            .left = 0, .top = 0,
+            .right = client_size.x,
+            .bottom = FONT_HEIGHT * 2,
+        };
+        _ = win32.FillRect(hdc, &rect, @ptrFromInt(@as(usize, @intFromEnum(win32.COLOR_WINDOW)) + 1));
+        _ = win32.SetBkColor(hdc, 0x00ffffff);
+        _ = win32.SetTextColor(hdc, 0x000000ff);
+        const msg = "Error:";
+        _ = win32.TextOutA(hdc, 0, 0 * FONT_HEIGHT, msg, msg.len);
+        _ = win32.TextOutA(hdc, 0, 1 * FONT_HEIGHT, @ptrCast(error_msg.ptr), @intCast(error_msg.len));
+    }
+
     _ = win32.EndPaint(hWnd, &ps);
 }
 
 fn getClientSize(hWnd: HWND) XY(i32) {
     var rect: win32.RECT = undefined;
     if (0 == win32.GetClientRect(hWnd, &rect))
-        fatal(hWnd, "GetClientRect failed, error={}", .{win32.GetLastError()});
+        fatal("GetClientRect failed, error={}", .{win32.GetLastError()});
     return .{
         .x = rect.right - rect.left,
         .y = rect.bottom - rect.top,
