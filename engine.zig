@@ -1,33 +1,54 @@
 // The complete interface between the current platform and the editor engine.
+const builtin = @import("builtin");
 const std = @import("std");
 const Input = @import("Input.zig");
 const platform = @import("platform.zig");
 const oom = platform.oom;
 const XY = @import("xy.zig").XY;
 
-const global = struct {
-    pub var input: Input = .{};
+const Gpa = std.heap.GeneralPurposeAllocator(.{});
+
+const CurrentFile = struct {
+    mem: []align(std.mem.page_size) u8,
+    name: []const u8,
+    pub fn deinit(self: CurrentFile) void {
+        global.gpa.free(self.name);
+        std.os.munmap(self.mem);
+    }
 };
 
-var row_allocator_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-const row_allocator = row_allocator_instance.allocator();
+const global = struct {
+    var gpa_instance = Gpa{ };
+    pub var gpa = gpa_instance.allocator();
+
+    pub var row_allocator_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    pub const row_allocator = row_allocator_instance.allocator();
+
+    pub var input: Input = .{};
+    pub var current_file: ?CurrentFile = null;
+};
+
+
+
 
 // ================================================================================
 // The interface for the platform to use
 // ================================================================================
 pub const Row = union(enum) {
-    file_backed,
+    file_backed: struct {
+        offset: usize,
+        limit: usize,
+    },
     array_list_backed: std.ArrayListUnmanaged(u8),
 
     pub fn getViewport(self: Row, render: Render) []u8 {
-        switch (self) {
-            .file_backed => @panic("todo"),
-            .array_list_backed => |al| {
-                if (render.viewport_pos.x >= al.items.len) return &[0]u8{ };
-                const avail = al.items.len - render.viewport_pos.x;
-                return al.items[render.viewport_pos.x ..][0 .. @min(avail, render.viewport_size.x)];
-            },
-        }
+        const slice = switch (self) {
+            .file_backed => |r| global.current_file.?.mem[r.offset..r.limit],
+            .array_list_backed => |al| al.items,
+        };
+        if (render.viewport_pos.x >= slice.len) return &[0]u8{ };
+        const avail = slice.len - render.viewport_pos.x;
+        return slice[render.viewport_pos.x ..][0 .. @min(avail, render.viewport_size.x)];
     }
 };
 pub const OpenFilePrompt = struct {
@@ -112,7 +133,7 @@ fn handleAction(action: Input.Action) void {
                     const needed_len = cursor_pos.y + 1;
                     if (global_render.rows.items.len < needed_len) {
                         std.log.info("adding {} row(s)", .{needed_len - global_render.rows.items.len});
-                        global_render.rows.ensureTotalCapacity(row_allocator, needed_len) catch |e| oom(e);
+                        global_render.rows.ensureTotalCapacity(global.row_allocator, needed_len) catch |e| oom(e);
                         const old_len = global_render.rows.items.len;
                         global_render.rows.items.len = needed_len;
                         for (global_render.rows.items[old_len .. needed_len]) |*row| {
@@ -128,14 +149,14 @@ fn handleAction(action: Input.Action) void {
                 };
 
                 if (al.items.len > cursor_pos.x) {
-                    al.ensureUnusedCapacity(row_allocator, 1) catch |e| oom(e);
+                    al.ensureUnusedCapacity(global.row_allocator, 1) catch |e| oom(e);
                     const old_len = al.items.len;
                     al.items.len += 1;
                     std.mem.copyBackwards(u8, al.items[cursor_pos.x + 1..], al.items[cursor_pos.x..old_len]);
                 }
                 if (cursor_pos.x >= al.items.len) {
                     const needed_len = cursor_pos.x + 1;
-                    al.ensureTotalCapacity(row_allocator, needed_len) catch |e| oom(e);
+                    al.ensureTotalCapacity(global.row_allocator, needed_len) catch |e| oom(e);
                     const old_len = al.items.len;
                     al.items.len = needed_len;
                     for (al.items[old_len .. needed_len]) |*c| {
@@ -220,10 +241,50 @@ fn handleAction(action: Input.Action) void {
 
 fn openFile(filename: []const u8) void {
     var file = std.fs.cwd().openFile(filename, .{}) catch |err| {
-        global_render.setError("openFile '{s}' failed with {s}", .{filename, @errorName(err)});
+        global_render.setError("open '{s}' failed, error={s}", .{filename, @errorName(err)});
         platform.renderModified();
         return;
     };
     defer file.close();
-    std.log.err("TODO: implement openFile '{s}'", .{filename});
+    const file_size = file.getEndPos() catch |err| {
+        global_render.setError("get file size of '{s}' failed, error={s}", .{filename, @errorName(err)});
+        platform.renderModified();
+        return;
+    };
+    if (builtin.os.tag == .windows) {
+        global_render.setError("mmap not implemented on windows", .{});
+        platform.renderModified();
+        return;
+    }
+    const mem = std.os.mmap(null, file_size, std.os.PROT.READ, std.os.MAP.PRIVATE, file.handle, 0) catch |err| {
+        global_render.setError("mmap '{s}' failed, error={s}", .{filename, @errorName(err)});
+        platform.renderModified();
+        return;
+    };
+    errdefer std.os.munmap(mem);
+    const name_copy = global.gpa.dupe(u8, filename) catch |e| oom(e);
+    errdefer global.gpa.free(name_copy);
+
+    // initialize the view
+    global.row_allocator_instance.deinit();
+    global.row_allocator_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    global_render.rows = .{};
+
+    {
+        var line_it = std.mem.split(u8, mem, "\n");
+        while (line_it.next()) |line| {
+            const offset = @intFromPtr(line.ptr) - @intFromPtr(mem.ptr);
+            global_render.rows.append(global.row_allocator, .{ .file_backed = .{
+                .offset = offset,
+                .limit = offset + line.len,
+            }}) catch |e| oom(e);
+        }
+    }
+
+
+    if (global.current_file) |current_file| current_file.deinit();
+    global.current_file = .{
+        .mem = mem,
+        .name = name_copy,
+    };
 }
