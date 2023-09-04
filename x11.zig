@@ -5,6 +5,7 @@ const x = @import("x");
 const CmdlineOpt = @import("CmdlineOpt.zig");
 const Input = @import("Input.zig");
 const engine = @import("engine.zig");
+const color = @import("color.zig");
 const common = @import("x11common.zig");
 const ContiguousReadBuffer = x.ContiguousReadBuffer;
 const XY = @import("xy.zig").XY;
@@ -14,8 +15,10 @@ const Endian = std.builtin.Endian;
 pub const Ids = struct {
     base: u32,
     pub fn window(self: Ids) u32 { return self.base; }
-    pub fn fg_gc(self: Ids) u32 { return self.base + 1; }
-    pub fn pixmap(self: Ids) u32 { return self.base + 2; }
+    pub fn gc_bg_fg(self: Ids) u32 { return self.base + 1; }
+    pub fn gc_cursor_fg(self: Ids) u32 { return self.base + 2; }
+    pub fn gc_bg_menu_fg(self: Ids) u32 { return self.base + 3; }
+    pub fn gc_bg_menu_err(self: Ids) u32 { return self.base + 4; }
 };
 
 var gpa_instance = std.heap.GeneralPurposeAllocator(.{}){};
@@ -76,6 +79,22 @@ fn x11Key(set: x.Charset, code: u8) ?Input.Key {
 pub fn oom(e: error{OutOfMemory}) noreturn {
     std.log.err("{s}", .{@errorName(e)});
     std.os.exit(0xff);
+}
+
+pub fn rgbToXDepth16(rgb: color.Rgb) u16 {
+    const r: u16 = @intCast((rgb.r >> 3) & 0x1f);
+    const g: u16 = @intCast((rgb.g >> 3) & 0x1f);
+    const b: u16 = @intCast((rgb.b >> 3) & 0x1f);
+    return (r << 11) | (g << 6) | b;
+}
+
+pub fn rgbToX(rgb: color.Rgb, depth_bits: u8) u32 {
+    return switch (depth_bits) {
+        16 => rgbToXDepth16(rgb),
+        24 => (@as(u32, rgb.r) << 16) | (@as(u32, rgb.g) << 8) | (@as(u32, rgb.b) << 0),
+        32 => (@as(u32, rgb.r) << 16) | (@as(u32, rgb.g) << 8) | (@as(u32, rgb.b) << 0),
+        else => @panic("todo"),
+    };
 }
 
 pub fn go(cmdline_opt: CmdlineOpt) !void {
@@ -179,7 +198,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
             .visual_id = screen.root_visual,
             }, .{
             //            .bg_pixmap = .copy_from_parent,
-            .bg_pixel = x.rgb24To(0xbbccdd, screen.root_depth),
+            .bg_pixel = rgbToX(color.bg, screen.root_depth),
             //            //.border_pixmap =
             //            .border_pixel = 0x01fa8ec9,
             //            .bit_gravity = .north_west,
@@ -212,27 +231,37 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         try conn.send(msg_buf[0..len]);
     }
 
-    // TODO: we probably only need 1 graphics context??
-    {
-        var msg_buf: [x.create_gc.max_len]u8 = undefined;
-        const len = x.create_gc.serialize(&msg_buf, .{
-            .gc_id = global.ids.fg_gc(),
-            .drawable_id = screen.root,
-            }, .{
-            .background = screen.black_pixel,
-            .foreground = x.rgb24To(0xffaadd, screen.root_depth),
-            // prevent NoExposure events when we CopyArea
-            .graphics_exposures = false,
-        });
-        try conn.send(msg_buf[0..len]);
-    }
+    try createGc(
+        screen.root,
+        global.ids.gc_bg_fg(),
+        rgbToX(color.bg, screen.root_depth),
+        rgbToX(color.fg, screen.root_depth),
+    );
+    try createGc(
+        screen.root,
+        global.ids.gc_cursor_fg(),
+        rgbToX(color.cursor, screen.root_depth),
+        rgbToX(color.fg, screen.root_depth),
+    );
+    try createGc(
+        screen.root,
+        global.ids.gc_bg_menu_fg(),
+        rgbToX(color.bg_menu, screen.root_depth),
+        rgbToX(color.fg, screen.root_depth),
+    );
+    try createGc(
+        screen.root,
+        global.ids.gc_bg_menu_err(),
+        rgbToX(color.bg_menu, screen.root_depth),
+        rgbToX(color.err, screen.root_depth),
+    );
 
     // get some font information
     {
         const text_literal = [_]u16 { 'm' };
         const text = x.Slice(u16, [*]const u16) { .ptr = &text_literal, .len = text_literal.len };
         var msg: [x.query_text_extents.getLen(text.len)]u8 = undefined;
-        x.query_text_extents.serialize(&msg, global.ids.fg_gc(), text);
+        x.query_text_extents.serialize(&msg, global.ids.gc_bg_fg(), text);
         try conn.send(&msg);
     }
 
@@ -359,6 +388,21 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         }
     }
 }
+
+fn createGc(drawable_id: u32, gc_id: u32, bg: u32, fg: u32) !void {
+    var msg_buf: [x.create_gc.max_len]u8 = undefined;
+    const len = x.create_gc.serialize(&msg_buf, .{
+        .gc_id = gc_id,
+        .drawable_id = drawable_id,
+    }, .{
+        .background = bg,
+        .foreground = fg,
+        // prevent NoExposure events when we CopyArea
+        .graphics_exposures = false,
+    });
+    try common.send(global.sock, msg_buf[0..len]);
+}
+
 // ================================================================================
 // The interface for the engine to use
 // ================================================================================
@@ -391,40 +435,25 @@ fn render() !void {
         try common.send(global.sock, &msg);
     }
 
-    for (engine.global_render.getViewportRows(), 0..) |row, row_index| {
+    const viewport_rows = engine.global_render.getViewportRows();
+
+    for (viewport_rows, 0..) |row, row_index| {
         const text = row.getViewport(engine.global_render);
-        const text_xslice = x.Slice(u8, [*]const u8) {
-            .ptr = text.ptr,
-            .len = std.math.cast(u8, text.len)
-                orelse @panic("todo: handle viewport row longer than 255"),
-        };
-        var msg_buf: [x.image_text8.max_len]u8 = undefined;
-        x.image_text8.serialize(&msg_buf, text_xslice, .{
-            .drawable_id = global.ids.window(),
-            .gc_id = global.ids.fg_gc(),
-            .x = 0,
-            .y = @as(i16, @intCast(row_index * global.font_dims.height)) + global.font_dims.font_ascent,
-        });
-        try common.send(global.sock, msg_buf[0 .. x.image_text8.getLen(text_xslice.len)]);
+        try renderText(global.ids.gc_bg_fg(), text, .{ .x = 0, .y = @intCast(row_index) });
     }
 
-    if (engine.global_render.cursor_pos) |cursor_pos_index| {
-        const cursor_pos: XY(i16) = .{
-            .x = @intCast(cursor_pos_index.x * global.font_dims.width),
-            .y = @intCast(cursor_pos_index.y * global.font_dims.height),
-        };
-
-        var msg: [x.poly_fill_rectangle.getLen(1)]u8 = undefined;
-        x.poly_fill_rectangle.serialize(&msg, .{
-            .drawable_id = global.ids.window(),
-            .gc_id = global.ids.fg_gc(),
-        }, &[_]x.Rectangle {
-            .{
-                .x = cursor_pos.x, .y = cursor_pos.y,
-                .width = global.font_dims.width, .height = global.font_dims.height,
-            },
-        });
-        try common.send(global.sock, &msg);
+    // draw cursor
+    if (engine.global_render.cursor_pos) |cursor_global_pos| {
+        if (engine.global_render.toViewportPos(cursor_global_pos)) |cursor_viewport_pos| {
+            const char_str: []const u8 = blk: {
+                if (cursor_viewport_pos.y >= viewport_rows.len) break :blk " ";
+                const row = &viewport_rows[cursor_viewport_pos.y];
+                const row_str = row.getViewport(engine.global_render);
+                if (cursor_viewport_pos.x >= row_str.len) break :blk " ";
+                break :blk row_str[cursor_viewport_pos.x..];
+            };
+            try renderText(global.ids.gc_cursor_fg(), char_str[0 .. 1], cursor_viewport_pos);
+        }
     }
 
     if (engine.global_render.open_file_prompt) |*prompt| {
@@ -437,8 +466,8 @@ fn render() !void {
             });
             try common.send(global.sock, &msg);
         }
-        try renderText("Open File:", .{ .x = 0, .y = 0 });
-        try renderText(prompt.getPathConst(), .{ .x = 0, .y = 1 });
+        try renderText(global.ids.gc_bg_menu_fg(), "Open File:", .{ .x = 0, .y = 0 });
+        try renderText(global.ids.gc_bg_menu_fg(), prompt.getPathConst(), .{ .x = 0, .y = 1 });
     }
     if (engine.global_render.getError()) |error_msg| {
         {
@@ -450,12 +479,12 @@ fn render() !void {
             });
             try common.send(global.sock, &msg);
         }
-        try renderText("Error:", .{ .x = 0, .y = 0 });
-        try renderText(error_msg, .{ .x = 0, .y = 1 });
+        try renderText(global.ids.gc_bg_menu_err(), "Error:", .{ .x = 0, .y = 0 });
+        try renderText(global.ids.gc_bg_menu_err(), error_msg, .{ .x = 0, .y = 1 });
     }
 }
 
-fn renderText(text: []const u8, pos: XY(u16)) !void {
+fn renderText(gc_id: u32, text: []const u8, pos: XY(u16)) !void {
     const xslice = x.Slice(u8, [*]const u8) {
         .ptr = text.ptr,
         .len = std.math.cast(u8, text.len) orelse @panic("todo: handle render text longer than 255"),
@@ -463,7 +492,7 @@ fn renderText(text: []const u8, pos: XY(u16)) !void {
     var msg_buf: [x.image_text8.max_len]u8 = undefined;
     x.image_text8.serialize(&msg_buf, xslice, .{
         .drawable_id = global.ids.window(),
-        .gc_id = global.ids.fg_gc(),
+        .gc_id = gc_id,
         .x = @intCast(pos.x * global.font_dims.width),
         .y = @as(i16, @intCast(pos.y * global.font_dims.height)) + global.font_dims.font_ascent,
     });

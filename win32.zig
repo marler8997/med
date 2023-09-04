@@ -3,6 +3,7 @@ const std = @import("std");
 const build_options = @import("build_options");
 const CmdlineOpt = @import("CmdlineOpt.zig");
 const engine = @import("engine.zig");
+const color = @import("color.zig");
 
 const Input = @import("Input.zig");
 
@@ -24,6 +25,8 @@ const XY = @import("xy.zig").XY;
 
 const global = struct {
     pub var x11: if (build_options.enable_x11_backend) bool else void = undefined;
+    pub var brush_bg: win32.HBRUSH = undefined;
+    pub var brush_bg_menu: win32.HBRUSH = undefined;
     pub var hFont: win32.HFONT = undefined;
     pub var hWnd: win32.HWND = undefined;
 };
@@ -44,6 +47,10 @@ pub fn fatal(comptime fmt: []const u8, args: anytype) noreturn {
     std.os.exit(0xff);
 }
 
+fn toColorRef(rgb: color.Rgb) u32 {
+    return (@as(u32, rgb.r) << 0) | (@as(u32, rgb.g) << 8) | (@as(u32, rgb.b) << 16);
+}
+
 pub fn go(cmdline_opt: CmdlineOpt) !void {
     if (build_options.enable_x11_backend) {
         global.x11 = cmdline_opt.x11;
@@ -51,6 +58,11 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
             return @import("x11.zig").go(cmdline_opt);
         }
     }
+
+    global.brush_bg = win32.CreateSolidBrush(toColorRef(color.bg)) orelse
+        fatal("CreateSolidBrush failed, error={}", .{win32.GetLastError()});
+    global.brush_bg_menu = win32.CreateSolidBrush(toColorRef(color.bg_menu)) orelse
+        fatal("CreateSolidBrush failed, error={}", .{win32.GetLastError()});
 
     const CLASS_NAME = L("Med");
     const wc = win32.WNDCLASS{
@@ -208,7 +220,7 @@ fn paint(hWnd: HWND) void {
     {
         // hbrBackground is null so we draw our own background for now
         const rect = win32.RECT{ .left = 0, .top = 0, .right = client_size.x, .bottom = client_size.y };
-        _ = win32.FillRect(hdc, &rect, @ptrFromInt(@as(usize, @intFromEnum(win32.COLOR_WINDOW)) + 1));
+        _ = win32.FillRect(hdc, &rect, global.brush_bg);
     }
 
     const FONT_WIDTH = 8;
@@ -217,8 +229,8 @@ fn paint(hWnd: HWND) void {
     const viewport_rows = engine.global_render.getViewportRows();
 
     _ = win32.SelectObject(hdc, global.hFont);
-    _ = win32.SetBkColor(hdc, 0x00ffffff);
-    _ = win32.SetTextColor(hdc, 0x00000000);
+    _ = win32.SetBkColor(hdc, toColorRef(color.bg));
+    _ = win32.SetTextColor(hdc, toColorRef(color.fg));
     for (viewport_rows, 0..) |row, row_index| {
         const y: i32 = @intCast(row_index * FONT_HEIGHT);
         const row_str = row.getViewport(engine.global_render);
@@ -241,8 +253,8 @@ fn paint(hWnd: HWND) void {
                 if (cursor_viewport_pos.x >= row_str.len) break :blk " ";
                 break :blk row_str[cursor_viewport_pos.x..];
             };
-            _ = win32.SetBkColor(hdc, 0x00ff0000);
-            _ = win32.SetTextColor(hdc, 0x00ffffff);
+            _ = win32.SetBkColor(hdc, toColorRef(color.cursor));
+            _ = win32.SetTextColor(hdc, toColorRef(color.fg));
             _ = win32.TextOutA(hdc, viewport_pos.x, viewport_pos.y, @ptrCast(char_str), 1);
         }
     }
@@ -253,9 +265,9 @@ fn paint(hWnd: HWND) void {
             .right = client_size.x,
             .bottom = FONT_HEIGHT * 2,
         };
-        _ = win32.FillRect(hdc, &rect, @ptrFromInt(@as(usize, @intFromEnum(win32.COLOR_WINDOW)) + 1));
-        _ = win32.SetBkColor(hdc, 0x00ffffff);
-        _ = win32.SetTextColor(hdc, 0x00000000);
+        _ = win32.FillRect(hdc, &rect, global.brush_bg_menu);
+        _ = win32.SetBkColor(hdc, toColorRef(color.bg_menu));
+        _ = win32.SetTextColor(hdc, toColorRef(color.fg));
         const msg = "Open File:";
         _ = win32.TextOutA(hdc, 0, 0 * FONT_HEIGHT, msg, msg.len);
         const path = prompt.getPathConst();
@@ -267,9 +279,9 @@ fn paint(hWnd: HWND) void {
             .right = client_size.x,
             .bottom = FONT_HEIGHT * 2,
         };
-        _ = win32.FillRect(hdc, &rect, @ptrFromInt(@as(usize, @intFromEnum(win32.COLOR_WINDOW)) + 1));
-        _ = win32.SetBkColor(hdc, 0x00ffffff);
-        _ = win32.SetTextColor(hdc, 0x000000ff);
+        _ = win32.FillRect(hdc, &rect, global.brush_bg_menu);
+        _ = win32.SetBkColor(hdc, toColorRef(color.bg_menu));
+        _ = win32.SetTextColor(hdc, toColorRef(color.err));
         const msg = "Error:";
         _ = win32.TextOutA(hdc, 0, 0 * FONT_HEIGHT, msg, msg.len);
         _ = win32.TextOutA(hdc, 0, 1 * FONT_HEIGHT, @ptrCast(error_msg.ptr), @intCast(error_msg.len));
