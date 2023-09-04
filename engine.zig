@@ -168,7 +168,14 @@ fn handleAction(action: Input.Action) void {
                 platform.renderModified();
             }
         },
-        .cursor_line_start => std.log.info("TODO: implement cursor_line_start", .{}),
+        .cursor_line_start => {
+            if (global_render.cursor_pos) |*cursor_pos| {
+                if (cursor_pos.x != 0) {
+                    cursor_pos.x = 0;
+                    platform.renderModified();
+                }
+            }
+        },
         .cursor_line_end => std.log.info("TODO: implement cursor_line_end", .{}),
         .open_file => {
             if (global_render.open_file_prompt == null) {
