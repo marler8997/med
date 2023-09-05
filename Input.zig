@@ -23,6 +23,7 @@ pub const Key = enum {
     comma,
     period,
     forward_slash,
+    _0, _1, _2, _3, _4, _5, _6, _7, _8, _9,
     a, b, c, d, e, f, g, h, i, j, k, l, m,
     n, o, p, q, r, s, t, u, v, w, x, y, z,
 };
@@ -57,6 +58,8 @@ pub fn setKeyState(self: *Input, key: Key, state: KeyState) ?Action {
             .comma => return Action{ .add_char = ',' },
             .period => return Action{ .add_char = '.' },
             .forward_slash => return Action{ .add_char = '/' },
+            ._0, ._1, ._2, ._3, ._4, ._5, ._6, ._7, ._8, ._9 => |c|
+                return Action{ .add_char = '0' + (@intFromEnum(c) - @intFromEnum(Key._0)) },
             .a, .b, .c, .d, .e, .f, .g, .h, .i, .j, .k, .l, .m,
             .n, .o, .p, .q, .r, .s, .t, .u, .v, .w, .x, .y, .z,
             => |c| {

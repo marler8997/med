@@ -248,6 +248,7 @@ fn vkToKey(vk: u8) ?Input.Key {
         @intFromEnum(win32.VK_RETURN) => .enter,
         @intFromEnum(win32.VK_CONTROL) => .control,
         @intFromEnum(win32.VK_SPACE) => .space,
+        '0'...'9' => @enumFromInt(@intFromEnum(Input.Key._0) + (vk - '0')),
         'A'...'Z' => @enumFromInt(@intFromEnum(Input.Key.a) + (vk - 'A')),
         @intFromEnum(win32.VK_OEM_COMMA) => .comma,
         @intFromEnum(win32.VK_OEM_PERIOD) => .period,
