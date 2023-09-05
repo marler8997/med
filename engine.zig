@@ -41,6 +41,20 @@ pub const Row = union(enum) {
     },
     array_list_backed: std.ArrayListUnmanaged(u8),
 
+    pub fn getLen(self: Row) usize {
+        return switch (self) {
+            .file_backed => |r| r.limit - r.offset,
+            .array_list_backed => |al| al.items.len,
+        };
+    }
+    /// WARNING: this slice becomes invalid if this row is "modified" i.e.
+    ///          appending to it or change it from file_backed to array_list_backed
+    pub fn getSlice(self: Row) []u8 {
+        return switch (self) {
+            .file_backed => |r| global.current_file.?.map.mem[r.offset..r.limit],
+            .array_list_backed => |al| al.items,
+        };
+    }
     pub fn getViewport(self: Row, render: Render) []u8 {
         const slice = switch (self) {
             .file_backed => |r| global.current_file.?.map.mem[r.offset..r.limit],
@@ -156,10 +170,7 @@ fn handleAction(action: Input.Action) void {
                 };
 
                 if (al.items.len > cursor_pos.x) {
-                    al.ensureUnusedCapacity(global.row_allocator, 1) catch |e| oom(e);
-                    const old_len = al.items.len;
-                    al.items.len += 1;
-                    std.mem.copyBackwards(u8, al.items[cursor_pos.x + 1..], al.items[cursor_pos.x..old_len]);
+                    arrayListUnmanagedShift(global.row_allocator, u8, al, cursor_pos.x, 1);
                 }
                 if (cursor_pos.x >= al.items.len) {
                     const needed_len = cursor_pos.x + 1;
@@ -190,7 +201,38 @@ fn handleAction(action: Input.Action) void {
                 platform.renderModified();
                 return;
             }
-            std.log.warn("TODO: handle enter", .{});
+            if (global_render.cursor_pos) |*cursor_pos| {
+                const new_row_index = cursor_pos.y + 1;
+                insertRow(new_row_index);
+
+                // copy contents from current row to new row
+                const copied = blk: {
+                    // NOTE: current_row becomes invalid once rows at cursor_pos.y is modified
+                    const current_row = global_render.rows.items[cursor_pos.y].getSlice();
+                    if (cursor_pos.x >= current_row.len)
+                        break :blk 0;
+
+                    const src = current_row[cursor_pos.x..];
+                    // we know the new row we just added MUST already be array_list_backed
+                    global_render.rows.items[new_row_index].array_list_backed.appendSlice(
+                        global.row_allocator,
+                        src,
+                    ) catch |e| oom(e);
+                    break :blk src.len;
+                };
+
+                const deleted = deleteToEndOfLine(cursor_pos.y, cursor_pos.x);
+                if (copied != deleted)
+                    std.debug.panic("copied {} but deleted {}?", .{copied, deleted});
+
+                global_render.cursor_pos = .{
+                    .x = 0, // TODO: should we try to autodetect tabbing here?
+                    .y = cursor_pos.y + 1,
+                };
+                platform.renderModified();
+                return;
+            }
+            std.log.warn("TODO: handle enter with no cursor?", .{});
         },
         .cursor_back => {
             if (global_render.cursor_pos) |*cursor_pos| {
@@ -291,4 +333,67 @@ fn openFile(filename: []const u8) error{Reported}!void {
         .map = map,
         .name = name_copy,
     };
+}
+
+// after calling, guarantees that global_render.rows[row_index] is
+// an empty array_list_backed row.
+fn insertRow(row_index: usize) void {
+    std.log.info("insertRow at index {} (current_len={})", .{
+        row_index,
+        global_render.rows.items.len,
+    });
+
+    if (row_index >= global_render.rows.items.len) {
+        while (true) {
+            std.log.info("  insertRow: add blank row at index {}", .{global_render.rows.items.len});
+            global_render.rows.append(global.row_allocator, .{ .array_list_backed = .{ } }) catch |e| oom(e);
+            if (global_render.rows.items.len > row_index)
+                return;
+        }
+    }
+
+    std.log.info("  insertRow: shifting!", .{});
+    arrayListUnmanagedShift(
+        global.row_allocator,
+        Row,
+        &global_render.rows,
+        row_index,
+        1,
+    );
+    global_render.rows.items[row_index] = .{ .array_list_backed = .{ } };
+}
+
+fn deleteToEndOfLine(row_index: usize, line_offset: usize) usize {
+    if (row_index >= global_render.rows.items.len)
+        return 0;
+
+    const row = &global_render.rows.items[row_index];
+    switch (row.*) {
+        .file_backed => |fb| {
+            const str = global.current_file.?.map.mem[fb.offset..fb.limit];
+            if (line_offset >= str.len) return 0;
+            row.* = .{ .array_list_backed = .{} };
+            row.array_list_backed.appendSlice(global.row_allocator, str[0 .. line_offset]) catch |e| oom(e);
+            return str.len - line_offset;
+        },
+        .array_list_backed => |*al| {
+            if (line_offset >= al.items.len) return 0;
+            const remove_len = al.items.len - line_offset;
+            al.items.len = line_offset;
+            return remove_len;
+        },
+    }
+}
+
+fn arrayListUnmanagedShift(
+    allocator: std.mem.Allocator,
+    comptime T: type,
+    al: *std.ArrayListUnmanaged(T),
+    start: usize,
+    amount: usize,
+) void {
+    al.ensureUnusedCapacity(allocator, amount) catch |e| oom(e);
+    const old_len = al.items.len;
+    al.items.len += amount;
+    std.mem.copyBackwards(T, al.items[start + amount..], al.items[start .. old_len]);
 }
