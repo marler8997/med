@@ -143,9 +143,16 @@ fn handleAction(action: Input.Action) void {
                 }
 
                 const row = &global_render.rows.items[cursor_pos.y];
-                const al = switch (row.*) {
-                    .file_backed => @panic("todo"),
-                    .array_list_backed => |*al| al,
+                const al: *std.ArrayListUnmanaged(u8) = blk: {
+                    switch (row.*) {
+                        .file_backed => |fb| {
+                            const str = global.current_file.?.map.mem[fb.offset..fb.limit];
+                            row.* = .{ .array_list_backed = .{} };
+                            row.array_list_backed.appendSlice(global.row_allocator, str) catch |e| oom(e);
+                            break :blk &row.array_list_backed;
+                        },
+                        .array_list_backed => |*al| break :blk al,
+                    }
                 };
 
                 if (al.items.len > cursor_pos.x) {
