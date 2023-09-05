@@ -9,11 +9,11 @@ const XY = @import("xy.zig").XY;
 const Gpa = std.heap.GeneralPurposeAllocator(.{});
 
 const CurrentFile = struct {
-    mem: []align(std.mem.page_size) u8,
+    map: platform.Mmap,
     name: []const u8,
     pub fn deinit(self: CurrentFile) void {
         global.gpa.free(self.name);
-        std.os.munmap(self.mem);
+        self.map.deinit();
     }
 };
 
@@ -43,7 +43,7 @@ pub const Row = union(enum) {
 
     pub fn getViewport(self: Row, render: Render) []u8 {
         const slice = switch (self) {
-            .file_backed => |r| global.current_file.?.mem[r.offset..r.limit],
+            .file_backed => |r| global.current_file.?.map.mem[r.offset..r.limit],
             .array_list_backed => |al| al.items,
         };
         if (render.viewport_pos.x >= slice.len) return &[0]u8{ };
@@ -176,7 +176,9 @@ fn handleAction(action: Input.Action) void {
                 return;
             }
             if (global_render.open_file_prompt) |*prompt| {
-                openFile(prompt.getPathConst());
+                openFile(prompt.getPathConst()) catch |e| switch (e) {
+                    error.Reported => {},
+                };
                 global_render.open_file_prompt = null;
                 platform.renderModified();
                 return;
@@ -239,29 +241,24 @@ fn handleAction(action: Input.Action) void {
     }
 }
 
-fn openFile(filename: []const u8) void {
+// TODO: use a different error reporting mechanism
+// can set error but does not call renderModified
+fn openFile(filename: []const u8) error{Reported}!void {
     var file = std.fs.cwd().openFile(filename, .{}) catch |err| {
         global_render.setError("open '{s}' failed, error={s}", .{filename, @errorName(err)});
-        platform.renderModified();
-        return;
+        return error.Reported;
     };
     defer file.close();
     const file_size = file.getEndPos() catch |err| {
         global_render.setError("get file size of '{s}' failed, error={s}", .{filename, @errorName(err)});
-        platform.renderModified();
+        return error.Reported;
+    };
+    const map = platform.mmap(filename, file, file_size) catch {
+        std.debug.assert(global_render.error_len != 0);
         return;
     };
-    if (builtin.os.tag == .windows) {
-        global_render.setError("mmap not implemented on windows", .{});
-        platform.renderModified();
-        return;
-    }
-    const mem = std.os.mmap(null, file_size, std.os.PROT.READ, std.os.MAP.PRIVATE, file.handle, 0) catch |err| {
-        global_render.setError("mmap '{s}' failed, error={s}", .{filename, @errorName(err)});
-        platform.renderModified();
-        return;
-    };
-    errdefer std.os.munmap(mem);
+    errdefer map.deinit();
+
     const name_copy = global.gpa.dupe(u8, filename) catch |e| oom(e);
     errdefer global.gpa.free(name_copy);
 
@@ -271,9 +268,9 @@ fn openFile(filename: []const u8) void {
     global_render.rows = .{};
 
     {
-        var line_it = std.mem.split(u8, mem, "\n");
+        var line_it = std.mem.split(u8, map.mem, "\n");
         while (line_it.next()) |line| {
-            const offset = @intFromPtr(line.ptr) - @intFromPtr(mem.ptr);
+            const offset = @intFromPtr(line.ptr) - @intFromPtr(map.mem.ptr);
             global_render.rows.append(global.row_allocator, .{ .file_backed = .{
                 .offset = offset,
                 .limit = offset + line.len,
@@ -284,7 +281,7 @@ fn openFile(filename: []const u8) void {
 
     if (global.current_file) |current_file| current_file.deinit();
     global.current_file = .{
-        .mem = mem,
+        .map = map,
         .name = name_copy,
     };
 }

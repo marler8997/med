@@ -414,6 +414,20 @@ pub fn renderModified() void {
     // TODO: maybe defer the rendering?
     render() catch |err| std.debug.panic("render failed with error {s}", .{@errorName(err)});
 }
+pub const Mmap = struct {
+    mem: []align(std.mem.page_size)u8,
+    pub fn deinit(self: Mmap) void {
+        std.os.munmap(self.mem);
+    }
+};
+pub fn mmap(filename: []const u8, file: std.fs.File, file_size: u64) error{Reported}!Mmap {
+    return .{
+        .mem = std.os.mmap(null, file_size, std.os.PROT.READ, std.os.MAP.PRIVATE, file.handle, 0) catch |err| {
+            engine.global_render.setError("mmap '{s}' failed, error={s}", .{filename, @errorName(err)});
+            return error.Reported;
+        },
+    };
+}
 
 // ================================================================================
 // End of the interface for the engine to use

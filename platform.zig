@@ -13,6 +13,8 @@ pub const go = impl.go;
 // ================================================================================
 pub const quit = impl.quit;
 pub const renderModified = impl.renderModified;
+pub const Mmap = impl.Mmap;
+pub const mmap = impl.mmap;
 // ================================================================================
 // End of the interface for the engine to use
 // ================================================================================

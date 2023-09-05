@@ -11,6 +11,7 @@ const win32 = struct {
     usingnamespace @import("win32").zig;
     usingnamespace @import("win32").foundation;
     usingnamespace @import("win32").system.library_loader;
+    usingnamespace @import("win32").system.memory;
     usingnamespace @import("win32").ui.input.keyboard_and_mouse;
     usingnamespace @import("win32").ui.windows_and_messaging;
     usingnamespace @import("win32").graphics.gdi;
@@ -156,6 +157,44 @@ pub fn renderModified() void {
 
     if (win32.TRUE != win32.InvalidateRect(global.hWnd, null, 0))
         fatal("InvalidateRect failed, error={}", .{win32.GetLastError()});
+}
+
+pub const Mmap = struct {
+    mapping: win32.HANDLE,
+    mem: []align(std.mem.page_size)u8,
+    pub fn deinit(self: Mmap) void {
+        std.debug.assert(0 != win32.UnmapViewOfFile(self.mem.ptr));
+        std.os.windows.CloseHandle(self.mapping);
+    }
+};
+pub fn mmap(filename: []const u8, file: std.fs.File, file_size: u64) error{Reported}!Mmap {
+    const mapping = win32.CreateFileMappingW(
+        file.handle,
+        null,
+        win32.PAGE_READONLY,
+        @intCast(0xffffffff & (file_size >> 32)),
+        @intCast(0xffffffff & (file_size)),
+        null,
+    ) orelse {
+        engine.global_render.setError("CreateFileMapping of '{s}' failed, error={}", .{filename, win32.GetLastError()});
+        return error.Reported;
+    };
+    errdefer std.os.windows.CloseHandle(mapping);
+
+    const ptr = win32.MapViewOfFile(
+        mapping,
+        win32.FILE_MAP_READ,
+        0, 0, 0,
+    ) orelse {
+        engine.global_render.setError("MapViewOfFile of '{s}' failed, error={}", .{filename, win32.GetLastError()});
+        return error.Reported;
+    };
+    errdefer std.debug.assert(0 != win32.UnmapViewOfFile(ptr));
+
+    return .{
+        .mapping = mapping,
+        .mem = @as([*]align(std.mem.page_size)u8, @alignCast(@ptrCast(ptr)))[0 .. file_size],
+    };
 }
 // ================================================================================
 // End of the interface for the engine to use
