@@ -29,6 +29,7 @@ const global = struct {
     pub var brush_bg: win32.HBRUSH = undefined;
     pub var brush_bg_menu: win32.HBRUSH = undefined;
     pub var hFont: win32.HFONT = undefined;
+    pub var font_size: XY(u16) = undefined;
     pub var hWnd: win32.HWND = undefined;
 };
 
@@ -101,7 +102,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
     };
 
     global.hFont = win32.CreateFontW(
-        16,0, // height/width
+        20,0, // height/width
         0,0, // escapement/orientation
         win32.FW_NORMAL, // weight
         0, 0, 0, // italic, underline, strikeout
@@ -129,12 +130,36 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         std.log.err("CreateWindow failed with {}", .{win32.GetLastError()});
         std.os.exit(0xff);
     };
+
+    global.font_size = getTextSize(global.hWnd, global.hFont);
+
     _ = win32.ShowWindow(global.hWnd, win32.SW_SHOW);
     var msg: MSG = undefined;
     while (win32.GetMessage(&msg, null, 0, 0) != 0) {
         _ = win32.TranslateMessage(&msg);
         _ = win32.DispatchMessage(&msg);
     }
+}
+
+fn getTextSize(hWnd: win32.HWND, hFont: win32.HFONT) XY(u16) {
+    const hdc = win32.GetDC(hWnd) orelse std.debug.panic("GetDC failed, error={}", .{win32.GetLastError()});
+    defer std.debug.assert(1 == win32.ReleaseDC(hWnd, hdc));
+
+    const old_font = win32.SelectObject(hdc, hFont);
+    defer _ = win32.SelectObject(hdc, old_font);
+
+    var metrics: win32.TEXTMETRIC = undefined;
+    if (0 == win32.GetTextMetrics(hdc, &metrics))
+        std.debug.panic("GetTextMetrics failed, error={}", .{win32.GetLastError()});
+    //std.log.info("{}", .{metrics});
+    return .{
+        // WARNING: windows doesn't guarantee AFAIK that rendering a multi-character
+        //          string will always use the same char width.  I could modify
+        //          how I'm rendering strings to position each one or figure out
+        //          how I can get TextOut to maintain a constant width.
+        .x = @intCast(metrics.tmAveCharWidth),
+        .y = @intCast(metrics.tmHeight),
+    };
 }
 
 // ================================================================================
@@ -262,16 +287,13 @@ fn paint(hWnd: HWND) void {
         _ = win32.FillRect(hdc, &rect, global.brush_bg);
     }
 
-    const FONT_WIDTH = 8;
-    const FONT_HEIGHT = 14;
-
     const viewport_rows = engine.global_render.getViewportRows();
 
     _ = win32.SelectObject(hdc, global.hFont);
     _ = win32.SetBkColor(hdc, toColorRef(color.bg));
     _ = win32.SetTextColor(hdc, toColorRef(color.fg));
     for (viewport_rows, 0..) |row, row_index| {
-        const y: i32 = @intCast(row_index * FONT_HEIGHT);
+        const y: i32 = @intCast(row_index * global.font_size.y);
         const row_str = row.getViewport(engine.global_render);
         // NOTE: for now we only support ASCII
         if (0 == win32.TextOutA(hdc, 0, y, @ptrCast(row_str), @intCast(row_str.len)))
@@ -282,8 +304,8 @@ fn paint(hWnd: HWND) void {
     if (engine.global_render.cursor_pos) |cursor_global_pos| {
         if (engine.global_render.toViewportPos(cursor_global_pos)) |cursor_viewport_pos| {
             const viewport_pos = XY(i32){
-                .x = @intCast(cursor_viewport_pos.x * FONT_WIDTH),
-                .y = @intCast(cursor_viewport_pos.y * FONT_HEIGHT),
+                .x = @intCast(cursor_viewport_pos.x * global.font_size.x),
+                .y = @intCast(cursor_viewport_pos.y * global.font_size.y),
             };
             const char_str: []const u8 = blk: {
                 if (cursor_viewport_pos.y >= viewport_rows.len) break :blk " ";
@@ -302,28 +324,28 @@ fn paint(hWnd: HWND) void {
         const rect = win32.RECT {
             .left = 0, .top = 0,
             .right = client_size.x,
-            .bottom = FONT_HEIGHT * 2,
+            .bottom = global.font_size.y * 2,
         };
         _ = win32.FillRect(hdc, &rect, global.brush_bg_menu);
         _ = win32.SetBkColor(hdc, toColorRef(color.bg_menu));
         _ = win32.SetTextColor(hdc, toColorRef(color.fg));
         const msg = "Open File:";
-        _ = win32.TextOutA(hdc, 0, 0 * FONT_HEIGHT, msg, msg.len);
+        _ = win32.TextOutA(hdc, 0, 0 * global.font_size.y, msg, msg.len);
         const path = prompt.getPathConst();
-        _ = win32.TextOutA(hdc, 0, 1 * FONT_HEIGHT, @ptrCast(path.ptr), @intCast(path.len));
+        _ = win32.TextOutA(hdc, 0, 1 * global.font_size.y, @ptrCast(path.ptr), @intCast(path.len));
     }
     if (engine.global_render.getError()) |error_msg| {
         const rect = win32.RECT {
             .left = 0, .top = 0,
             .right = client_size.x,
-            .bottom = FONT_HEIGHT * 2,
+            .bottom = global.font_size.y * 2,
         };
         _ = win32.FillRect(hdc, &rect, global.brush_bg_menu);
         _ = win32.SetBkColor(hdc, toColorRef(color.bg_menu));
         _ = win32.SetTextColor(hdc, toColorRef(color.err));
         const msg = "Error:";
-        _ = win32.TextOutA(hdc, 0, 0 * FONT_HEIGHT, msg, msg.len);
-        _ = win32.TextOutA(hdc, 0, 1 * FONT_HEIGHT, @ptrCast(error_msg.ptr), @intCast(error_msg.len));
+        _ = win32.TextOutA(hdc, 0, 0 * global.font_size.y, msg, msg.len);
+        _ = win32.TextOutA(hdc, 0, 1 * global.font_size.y, @ptrCast(error_msg.ptr), @intCast(error_msg.len));
     }
 
     _ = win32.EndPaint(hWnd, &ps);
