@@ -24,13 +24,16 @@ const HWND = win32.HWND;
 
 const XY = @import("xy.zig").XY;
 
+const window_style_ex = win32.WINDOW_EX_STYLE.initFlags(.{});
+const window_style = win32.WS_OVERLAPPEDWINDOW;
+
 const global = struct {
     pub var x11: if (build_options.enable_x11_backend) bool else void = undefined;
     pub var brush_bg: win32.HBRUSH = undefined;
     pub var brush_bg_menu: win32.HBRUSH = undefined;
     pub var hFont: win32.HFONT = undefined;
-    pub var font_size: XY(u16) = undefined;
     pub var hWnd: win32.HWND = undefined;
+    pub var font_size: XY(u16) = undefined;
 };
 
 pub fn oom(e: error{OutOfMemory}) noreturn {
@@ -65,6 +68,17 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         fatal("CreateSolidBrush failed, error={}", .{win32.GetLastError()});
     global.brush_bg_menu = win32.CreateSolidBrush(toColorRef(color.bg_menu)) orelse
         fatal("CreateSolidBrush failed, error={}", .{win32.GetLastError()});
+    global.hFont = win32.CreateFontW(
+        20,0, // height/width
+        0,0, // escapement/orientation
+        win32.FW_NORMAL, // weight
+        0, 0, 0, // italic, underline, strikeout
+        0, // charset
+        .DEFAULT_PRECIS, .DEFAULT_PRECIS, // outprecision, clipprecision
+        .PROOF_QUALITY, // quality
+        .MODERN, // pitch and family
+        L("SYSTEM_FIXED_FONT"), // face name
+    ) orelse fatal("CreateFont failed, error={}", .{win32.GetLastError()});
 
     const CLASS_NAME = L("Med");
     const wc = win32.WNDCLASS{
@@ -85,43 +99,14 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         std.os.exit(0xff);
     }
 
-    const window_style = win32.WS_OVERLAPPEDWINDOW;
-    const size: XY(i32) = blk: {
-        const default = XY(i32){ .x = CW_USEDEFAULT, .y = CW_USEDEFAULT };
-        var client_rect: win32.RECT = undefined;
-        client_rect = .{
-            .left = 0, .top = 0,
-            .right  = std.math.cast(i32, 400) orelse break :blk default,
-            .bottom = std.math.cast(i32, 400) orelse break :blk default,
-        };
-        std.debug.assert(0 != win32.AdjustWindowRect(&client_rect, window_style, 0));
-        break :blk .{
-            .x = client_rect.right - client_rect.left,
-            .y = client_rect.bottom - client_rect.top,
-        };
-    };
-
-    global.hFont = win32.CreateFontW(
-        20,0, // height/width
-        0,0, // escapement/orientation
-        win32.FW_NORMAL, // weight
-        0, 0, 0, // italic, underline, strikeout
-        0, // charset
-        .DEFAULT_PRECIS, .DEFAULT_PRECIS, // outprecision, clipprecision
-        .PROOF_QUALITY, // quality
-        .MODERN, // pitch and family
-        L("SYSTEM_FIXED_FONT"), // face name
-    ) orelse fatal("CreateFont failed, error={}", .{win32.GetLastError()});
-
     global.hWnd = win32.CreateWindowEx(
-        @enumFromInt(0), // Optional window styles.
+        window_style_ex,
         CLASS_NAME, // Window class
         // TODO: use the image name in the title if we have one
         L("Image Viewer"),
         window_style,
-        // position
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        size.x, size.y,
+        CW_USEDEFAULT, CW_USEDEFAULT, // position
+        0, 0, // size
         null, // Parent window
         null, // Menu
         win32.GetModuleHandle(null), // Instance handle
@@ -132,6 +117,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
     };
 
     global.font_size = getTextSize(global.hWnd, global.hFont);
+    resizeWindowToViewport();
 
     _ = win32.ShowWindow(global.hWnd, win32.SW_SHOW);
     var msg: MSG = undefined;
@@ -182,6 +168,36 @@ pub fn renderModified() void {
 
     if (win32.TRUE != win32.InvalidateRect(global.hWnd, null, 0))
         fatal("InvalidateRect failed, error={}", .{win32.GetLastError()});
+}
+
+fn resizeWindowToViewport() void {
+    const window_size: XY(i32) = blk: {
+        var rect = win32.RECT {
+            .left = 0, .top = 0,
+            .right  = @intCast(global.font_size.x * engine.global_render.viewport_size.x),
+            .bottom = @intCast(global.font_size.y * engine.global_render.viewport_size.y),
+        };
+        std.debug.assert(0 != win32.AdjustWindowRectEx(
+            &rect,
+            window_style,
+            0,
+            window_style_ex,
+        ));
+        break :blk .{
+            .x = rect.right - rect.left,
+            .y = rect.bottom - rect.top,
+        };
+    };
+    std.debug.assert(0 != win32.SetWindowPos(
+        global.hWnd,
+        null,
+        0, 0, // position
+        window_size.x, window_size.y,
+        win32.SET_WINDOW_POS_FLAGS.initFlags(.{
+            .NOZORDER = 1,
+            .NOMOVE = 1,
+        }),
+    ));
 }
 
 pub const Mmap = struct {

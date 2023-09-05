@@ -65,7 +65,7 @@ pub const Render = struct {
     cursor_pos: ?XY(u16) = .{ .x = 0, .y = 0 },
     size: XY(u16) = .{ .x = 0, .y = 0 },
     viewport_pos: XY(u32) = .{ .x = 0, .y = 0 },
-    viewport_size: XY(u16) = .{ .x = 30, .y = 40 },
+    viewport_size: XY(u16) = .{ .x = 80, .y = 40 },
     rows: std.ArrayListUnmanaged(Row) = .{},
     open_file_prompt: ?OpenFilePrompt = null,
 
