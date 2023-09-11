@@ -445,20 +445,20 @@ fn render() !void {
         try common.send(global.sock, &msg);
     }
 
-    const viewport_rows = engine.global_render.getViewportRows();
+    const viewport_rows = engine.global_view.getViewportRows();
 
     for (viewport_rows, 0..) |row, row_index| {
-        const text = row.getViewport(engine.global_render);
+        const text = row.getViewport(engine.global_view);
         try renderText(global.ids.gc_bg_fg(), text, .{ .x = 0, .y = @intCast(row_index) });
     }
 
     // draw cursor
-    if (engine.global_render.cursor_pos) |cursor_global_pos| {
-        if (engine.global_render.toViewportPos(cursor_global_pos)) |cursor_viewport_pos| {
+    if (engine.global_view.cursor_pos) |cursor_global_pos| {
+        if (engine.global_view.toViewportPos(cursor_global_pos)) |cursor_viewport_pos| {
             const char_str: []const u8 = blk: {
                 if (cursor_viewport_pos.y >= viewport_rows.len) break :blk " ";
                 const row = &viewport_rows[cursor_viewport_pos.y];
-                const row_str = row.getViewport(engine.global_render);
+                const row_str = row.getViewport(engine.global_view);
                 if (cursor_viewport_pos.x >= row_str.len) break :blk " ";
                 break :blk row_str[cursor_viewport_pos.x..];
             };
@@ -466,7 +466,7 @@ fn render() !void {
         }
     }
 
-    if (engine.global_render.open_file_prompt) |*prompt| {
+    if (engine.global_view.open_file_prompt) |*prompt| {
         {
             var msg: [x.clear_area.len]u8 = undefined;
             x.clear_area.serialize(&msg, false, global.ids.window(), .{
@@ -479,7 +479,7 @@ fn render() !void {
         try renderText(global.ids.gc_bg_menu_fg(), "Open File:", .{ .x = 0, .y = 0 });
         try renderText(global.ids.gc_bg_menu_fg(), prompt.getPathConst(), .{ .x = 0, .y = 1 });
     }
-    if (engine.global_render.err_msg) |err_msg| {
+    if (engine.global_view.err_msg) |err_msg| {
         {
             var msg: [x.clear_area.len]u8 = undefined;
             x.clear_area.serialize(&msg, false, global.ids.window(), .{

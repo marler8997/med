@@ -175,8 +175,8 @@ fn resizeWindowToViewport() void {
     const window_size: XY(i32) = blk: {
         var rect = win32.RECT {
             .left = 0, .top = 0,
-            .right  = @intCast(global.font_size.x * engine.global_render.viewport_size.x),
-            .bottom = @intCast(global.font_size.y * engine.global_render.viewport_size.y),
+            .right  = @intCast(global.font_size.x * engine.global_view.viewport_size.x),
+            .bottom = @intCast(global.font_size.y * engine.global_view.viewport_size.y),
         };
         std.debug.assert(0 != win32.AdjustWindowRectEx(
             &rect,
@@ -267,22 +267,22 @@ fn paint(hWnd: HWND) void {
         _ = win32.FillRect(hdc, &rect, global.brush_bg);
     }
 
-    const viewport_rows = engine.global_render.getViewportRows();
+    const viewport_rows = engine.global_view.getViewportRows();
 
     _ = win32.SelectObject(hdc, global.hFont);
     _ = win32.SetBkColor(hdc, toColorRef(color.bg));
     _ = win32.SetTextColor(hdc, toColorRef(color.fg));
     for (viewport_rows, 0..) |row, row_index| {
         const y: i32 = @intCast(row_index * global.font_size.y);
-        const row_str = row.getViewport(engine.global_render);
+        const row_str = row.getViewport(engine.global_view);
         // NOTE: for now we only support ASCII
         if (0 == win32.TextOutA(hdc, 0, y, @ptrCast(row_str), @intCast(row_str.len)))
             std.debug.panic("TextOut failed, error={}", .{win32.GetLastError()});
     }
 
     // draw cursor
-    if (engine.global_render.cursor_pos) |cursor_global_pos| {
-        if (engine.global_render.toViewportPos(cursor_global_pos)) |cursor_viewport_pos| {
+    if (engine.global_view.cursor_pos) |cursor_global_pos| {
+        if (engine.global_view.toViewportPos(cursor_global_pos)) |cursor_viewport_pos| {
             const viewport_pos = XY(i32){
                 .x = @intCast(cursor_viewport_pos.x * global.font_size.x),
                 .y = @intCast(cursor_viewport_pos.y * global.font_size.y),
@@ -290,7 +290,7 @@ fn paint(hWnd: HWND) void {
             const char_str: []const u8 = blk: {
                 if (cursor_viewport_pos.y >= viewport_rows.len) break :blk " ";
                 const row = &viewport_rows[cursor_viewport_pos.y];
-                const row_str = row.getViewport(engine.global_render);
+                const row_str = row.getViewport(engine.global_view);
                 if (cursor_viewport_pos.x >= row_str.len) break :blk " ";
                 break :blk row_str[cursor_viewport_pos.x..];
             };
@@ -300,7 +300,7 @@ fn paint(hWnd: HWND) void {
         }
     }
 
-    if (engine.global_render.open_file_prompt) |*prompt| {
+    if (engine.global_view.open_file_prompt) |*prompt| {
         const rect = win32.RECT {
             .left = 0, .top = 0,
             .right = client_size.x,
@@ -314,7 +314,7 @@ fn paint(hWnd: HWND) void {
         const path = prompt.getPathConst();
         _ = win32.TextOutA(hdc, 0, 1 * global.font_size.y, @ptrCast(path.ptr), @intCast(path.len));
     }
-    if (engine.global_render.err_msg) |err_msg| {
+    if (engine.global_view.err_msg) |err_msg| {
         const rect = win32.RECT {
             .left = 0, .top = 0,
             .right = client_size.x,
