@@ -4,8 +4,8 @@
 
     .dependencies = .{
         .zigx = .{
-            .url = "https://github.com/marler8997/zigx/archive/454432fd1ad0ae0f1a949b6f1828cffcce3bb4ce.tar.gz",
-            .hash = "1220a6ba0703e5baab2c5eb18931c66e4a73b59a298c24ed03f588c80e7c3f82a2ea",
+            .url = "https://github.com/marler8997/zigx/archive/a7440ff7e1d7557979e57b61cea63824fe1c8b02.tar.gz",
+            .hash = "1220d882f76dd9b7a1bca80047c967f5d699f39ed1b5b62013f1779cafbcbac7cf04",
         },
     },
 }
