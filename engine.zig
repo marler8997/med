@@ -170,7 +170,7 @@ fn handleAction(action: Input.Action) void {
                 };
 
                 if (al.items.len > cursor_pos.x) {
-                    arrayListUnmanagedShift(global.row_allocator, u8, al, cursor_pos.x, 1);
+                    arrayListUnmanagedShiftRight(global.row_allocator, u8, al, cursor_pos.x, 1);
                 }
                 if (cursor_pos.x >= al.items.len) {
                     const needed_len = cursor_pos.x + 1;
@@ -353,7 +353,7 @@ fn insertRow(row_index: usize) void {
     }
 
     std.log.info("  insertRow: shifting!", .{});
-    arrayListUnmanagedShift(
+    arrayListUnmanagedShiftRight(
         global.row_allocator,
         Row,
         &global_render.rows,
@@ -385,7 +385,7 @@ fn deleteToEndOfLine(row_index: usize, line_offset: usize) usize {
     }
 }
 
-fn arrayListUnmanagedShift(
+fn arrayListUnmanagedShiftRight(
     allocator: std.mem.Allocator,
     comptime T: type,
     al: *std.ArrayListUnmanaged(T),
