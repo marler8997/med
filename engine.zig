@@ -47,6 +47,27 @@ var to_global_err_instance = struct {
 const to_global_err = &to_global_err_instance.base;
 
 fn handleAction(action: Input.Action) void {
+    if (global_view.err_msg) |err_msg| {
+        switch (action) {
+            .add_char => {}, // ignore
+            .enter => {
+                err_msg.unref();
+                global_view.err_msg = null;
+                platform.errModified();
+            },
+            .cursor_back,
+            .cursor_forward,
+            .cursor_up,
+            .cursor_down,
+            .cursor_line_start,
+            .cursor_line_end,
+            => {}, // ignore
+            .open_file => {}, //ignore
+            .quit => platform.quit(),
+        }
+        return;
+    }
+
     switch (action) {
         .add_char => |ascii_code| {
             if (global_view.open_file_prompt) |*prompt| {
@@ -107,12 +128,6 @@ fn handleAction(action: Input.Action) void {
             }
         },
         .enter => {
-            if (global_view.err_msg) |*err_msg| {
-                err_msg.unref();
-                global_view.err_msg = null;
-                platform.errModified();
-                return;
-            }
             if (global_view.open_file_prompt) |*prompt| {
                 openFile(prompt.getPathConst()) catch |e| switch (e) {
                     error.Reported => {},
@@ -155,9 +170,7 @@ fn handleAction(action: Input.Action) void {
             std.log.warn("TODO: handle enter with no cursor?", .{});
         },
         .cursor_back => {
-            if (global_view.err_msg) |_| {
-                // ignore
-            } else if (global_view.open_file_prompt) |_| {
+            if (global_view.open_file_prompt) |_| {
                 // TODO: make the open file prompt it's own view so
                 //       we can just reuse it's functions for this
             } else if (global_view.cursorBack()) {
@@ -165,9 +178,7 @@ fn handleAction(action: Input.Action) void {
             }
         },
         .cursor_forward => {
-            if (global_view.err_msg) |_| {
-                // ignore
-            } else if (global_view.open_file_prompt) |_| {
+            if (global_view.open_file_prompt) |_| {
                 // TODO: make the open file prompt it's own view so
                 //       we can just reuse it's functions for this
             } else if (global_view.cursorForward()) {
@@ -175,9 +186,7 @@ fn handleAction(action: Input.Action) void {
             }
         },
         .cursor_up => {
-            if (global_view.err_msg) |_| {
-                // ignore
-            } else if (global_view.open_file_prompt) |_| {
+            if (global_view.open_file_prompt) |_| {
                 // TODO: make the open file prompt it's own view so
                 //       we can just reuse it's functions for this
             } else if (global_view.cursorUp()) {
@@ -185,9 +194,7 @@ fn handleAction(action: Input.Action) void {
             }
         },
         .cursor_down => {
-            if (global_view.err_msg) |_| {
-                // ignore
-            } else if (global_view.open_file_prompt) |_| {
+            if (global_view.open_file_prompt) |_| {
                 // TODO: make the open file prompt it's own view so
                 //       we can just reuse it's functions for this
             } else if (global_view.cursorDown()) {
@@ -195,9 +202,7 @@ fn handleAction(action: Input.Action) void {
             }
         },
         .cursor_line_start => {
-            if (global_view.err_msg) |_| {
-                // ignore
-            } else if (global_view.open_file_prompt) |_| {
+            if (global_view.open_file_prompt) |_| {
                 // TODO: make the open file prompt it's own view so
                 //       we can just reuse it's functions for this
             } else if (global_view.cursorLineStart()) {
@@ -205,9 +210,7 @@ fn handleAction(action: Input.Action) void {
             }
         },
         .cursor_line_end => {
-            if (global_view.err_msg) |_| {
-                // ignore
-            } else if (global_view.open_file_prompt) |_| {
+            if (global_view.open_file_prompt) |_| {
                 // TODO: make the open file prompt it's own view so
                 //       we can just reuse it's functions for this
             } else if (global_view.cursorLineEnd()) {
