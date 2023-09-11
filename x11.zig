@@ -77,6 +77,7 @@ fn x11Key(set: x.Charset, code: u8) ?Input.Key {
             else => null,
         },
         .keyboard => switch (code) {
+            @intFromEnum(x.charset.Keyboard.backspace_back_space_back_char) => .backspace,
             @intFromEnum(x.charset.Keyboard.return_enter) => .enter,
             @intFromEnum(x.charset.Keyboard.left_control) => .control,
             @intFromEnum(x.charset.Keyboard.right_control) => .control,

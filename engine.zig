@@ -62,7 +62,8 @@ fn handleAction(action: Input.Action) void {
             .cursor_line_start,
             .cursor_line_end,
             => {}, // ignore
-            .open_file => {}, //ignore
+            .backspace => {}, // ignore
+            .open_file => {}, // ignore
             .quit => platform.quit(),
         }
         return;
@@ -214,6 +215,12 @@ fn handleAction(action: Input.Action) void {
                 // TODO: make the open file prompt it's own view so
                 //       we can just reuse it's functions for this
             } else if (global_view.cursorLineEnd()) {
+                platform.viewModified();
+            }
+        },
+        .backspace => {
+            if (global_view.cursorBack()) {
+                _ = global_view.delete(.from_backspace) catch |e| oom(e);
                 platform.viewModified();
             }
         },

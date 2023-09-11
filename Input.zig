@@ -11,6 +11,7 @@ pub const Action = union(enum) {
     cursor_down,
     cursor_line_start,
     cursor_line_end,
+    backspace,
     open_file,
     quit,
 };
@@ -19,6 +20,7 @@ pub const Action = union(enum) {
 pub const Key = enum {
     control,
     enter,
+    backspace,
     space,
     comma,
     period,
@@ -54,6 +56,7 @@ pub fn setKeyState(self: *Input, key: Key, state: KeyState) ?Action {
                 self.control_sequence_len = 0;
             },
             .enter => return Action.enter,
+            .backspace => return Action.backspace,
             .space => return Action{ .add_char = ' ' },
             .comma => return Action{ .add_char = ',' },
             .period => return Action{ .add_char = '.' },

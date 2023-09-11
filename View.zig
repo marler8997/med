@@ -180,6 +180,37 @@ pub fn cursorLineEnd(self: *View) bool {
     return false;
 }
 
+pub const DeleteOption = enum { from_backspace, not_from_backspace };
+pub fn delete(self: *View, opt: DeleteOption) error{OutOfMemory}!bool {
+    if (self.cursor_pos) |*cursor_pos| {
+        if (cursor_pos.y >= self.rows.items.len)
+            return false;
+        const row = &self.rows.items[cursor_pos.y];
+        const row_len = row.getLen();
+        if (cursor_pos.x >= row_len) switch (opt) {
+            .from_backspace => return false,
+            .not_from_backspace =>
+                @panic("TODO: delete past current line content?"),
+        } else switch (row.*) {
+            .file_backed => |fb| {
+                const str = self.file.?.map.mem[fb.offset..fb.limit];
+                row.* = .{ .array_list_backed = .{} };
+                const al = &row.array_list_backed;
+                try al.ensureTotalCapacity(self.arena(), str.len - 1);
+                al.items.len = str.len - 1;
+                @memcpy(al.items[0 .. cursor_pos.x], str[0 .. cursor_pos.x],);
+                @memcpy(al.items[cursor_pos.x ..], str[cursor_pos.x + 1..],);
+                return true;
+            },
+            .array_list_backed => |*al| {
+                arrayListUnmanagedCut(u8, al, cursor_pos.x, 1);
+                return true;
+            },
+        }
+    }
+    return false;
+}
+
 pub fn deleteToEndOfLine(self: *View, row_index: usize, line_offset: usize) error{OutOfMemory}!usize {
     if (row_index >= self.rows.items.len)
         return 0;
@@ -200,4 +231,18 @@ pub fn deleteToEndOfLine(self: *View, row_index: usize, line_offset: usize) erro
             return remove_len;
         },
     }
+}
+
+fn arrayListUnmanagedCut(
+    comptime T: type,
+    al: *std.ArrayListUnmanaged(T),
+    pos: usize,
+    amount: usize,
+) void {
+    const from = pos + amount;
+    std.log.info("al cut len={} pos={} amount={} from={}", .{al.items.len, pos, amount, from});
+    std.debug.assert(from <= al.items.len);
+    const dst = al.items[pos..al.items.len - amount];
+    std.mem.copyForwards(T, dst, al.items[from..]);
+    al.items.len -= amount;
 }

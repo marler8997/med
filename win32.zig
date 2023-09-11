@@ -208,6 +208,7 @@ fn resizeWindowToViewport() void {
 
 fn vkToKey(vk: u8) ?Input.Key {
     return switch (vk) {
+        @intFromEnum(win32.VK_BACK) => .backspace,
         @intFromEnum(win32.VK_RETURN) => .enter,
         @intFromEnum(win32.VK_CONTROL) => .control,
         @intFromEnum(win32.VK_SPACE) => .space,
