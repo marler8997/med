@@ -160,6 +160,7 @@ pub fn quit() void {
     // TODO: this message could get lost if we are inside a modal loop I think
     win32.PostQuitMessage(0);
 }
+pub const errModified = renderModified;
 pub fn renderModified() void {
     if (build_options.enable_x11_backend) {
         if (global.x11)
@@ -198,44 +199,6 @@ fn resizeWindowToViewport() void {
             .NOMOVE = 1,
         }),
     ));
-}
-
-pub const Mmap = struct {
-    mapping: win32.HANDLE,
-    mem: []align(std.mem.page_size)u8,
-    pub fn deinit(self: Mmap) void {
-        std.debug.assert(0 != win32.UnmapViewOfFile(self.mem.ptr));
-        std.os.windows.CloseHandle(self.mapping);
-    }
-};
-pub fn mmap(filename: []const u8, file: std.fs.File, file_size: u64) error{Reported}!Mmap {
-    const mapping = win32.CreateFileMappingW(
-        file.handle,
-        null,
-        win32.PAGE_READONLY,
-        @intCast(0xffffffff & (file_size >> 32)),
-        @intCast(0xffffffff & (file_size)),
-        null,
-    ) orelse {
-        engine.global_render.setError("CreateFileMapping of '{s}' failed, error={}", .{filename, win32.GetLastError()});
-        return error.Reported;
-    };
-    errdefer std.os.windows.CloseHandle(mapping);
-
-    const ptr = win32.MapViewOfFile(
-        mapping,
-        win32.FILE_MAP_READ,
-        0, 0, 0,
-    ) orelse {
-        engine.global_render.setError("MapViewOfFile of '{s}' failed, error={}", .{filename, win32.GetLastError()});
-        return error.Reported;
-    };
-    errdefer std.debug.assert(0 != win32.UnmapViewOfFile(ptr));
-
-    return .{
-        .mapping = mapping,
-        .mem = @as([*]align(std.mem.page_size)u8, @alignCast(@ptrCast(ptr)))[0 .. file_size],
-    };
 }
 // ================================================================================
 // End of the interface for the engine to use
@@ -351,7 +314,7 @@ fn paint(hWnd: HWND) void {
         const path = prompt.getPathConst();
         _ = win32.TextOutA(hdc, 0, 1 * global.font_size.y, @ptrCast(path.ptr), @intCast(path.len));
     }
-    if (engine.global_render.getError()) |error_msg| {
+    if (engine.global_render.err_msg) |err_msg| {
         const rect = win32.RECT {
             .left = 0, .top = 0,
             .right = client_size.x,
@@ -362,7 +325,7 @@ fn paint(hWnd: HWND) void {
         _ = win32.SetTextColor(hdc, toColorRef(color.err));
         const msg = "Error:";
         _ = win32.TextOutA(hdc, 0, 0 * global.font_size.y, msg, msg.len);
-        _ = win32.TextOutA(hdc, 0, 1 * global.font_size.y, @ptrCast(error_msg.ptr), @intCast(error_msg.len));
+        _ = win32.TextOutA(hdc, 0, 1 * global.font_size.y, @ptrCast(err_msg.slice.ptr), @intCast(err_msg.slice.len));
     }
 
     _ = win32.EndPaint(hWnd, &ps);

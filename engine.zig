@@ -2,18 +2,21 @@
 const builtin = @import("builtin");
 const std = @import("std");
 const Input = @import("Input.zig");
+const MappedFile = @import("MappedFile.zig");
+const OnErr = @import("OnErr.zig");
 const platform = @import("platform.zig");
+const RefString = @import("RefString.zig");
 const oom = platform.oom;
 const XY = @import("xy.zig").XY;
 
 const Gpa = std.heap.GeneralPurposeAllocator(.{});
 
 const CurrentFile = struct {
-    map: platform.Mmap,
-    name: []const u8,
+    map: MappedFile,
+    name: RefString,
     pub fn deinit(self: CurrentFile) void {
-        global.gpa.free(self.name);
-        self.map.deinit();
+        self.map.unmap();
+        self.name.unref();
     }
 };
 
@@ -82,8 +85,7 @@ pub const Render = struct {
     rows: std.ArrayListUnmanaged(Row) = .{},
     open_file_prompt: ?OpenFilePrompt = null,
 
-    error_len: usize = 0,
-    error_buf: [max_error_msg]u8 = undefined,
+    err_msg: ?RefString = null,
 
     pub fn getViewportRows(self: Render) []Row {
         if (self.viewport_pos.y >= self.rows.items.len) return &[0]Row{ };
@@ -99,10 +101,6 @@ pub const Render = struct {
             .x = @intCast(pos.x - self.viewport_pos.x),
             .y = @intCast(pos.y - self.viewport_pos.y),
         };
-    }
-    pub fn getError(self: Render) ?[]const u8 {
-        if (self.error_len == 0) return null;
-        return self.error_buf[0 .. self.error_len];
     }
     pub fn setError(self: *Render, comptime fmt: []const u8, args: anytype) void {
         self.error_len = (std.fmt.bufPrint(&self.error_buf, fmt, args) catch |e| switch (e) {
@@ -125,6 +123,20 @@ pub fn notifyKeyEvent(key: Input.Key, state: Input.KeyState) void {
 // ================================================================================
 // End of the interface for the platform to use
 // ================================================================================
+
+var to_global_err_instance = struct {
+    base: OnErr = .{ .on_err = on_err },
+    fn on_err(context: *OnErr, msg: RefString) void {
+        _ = context;
+        if (global_render.err_msg) |m| {
+            m.unref();
+            global_render.err_msg = null;
+        }
+        global_render.err_msg = msg;
+        msg.addRef();
+    }
+}{ };
+const to_global_err = &to_global_err_instance.base;
 
 fn handleAction(action: Input.Action) void {
     switch (action) {
@@ -187,9 +199,10 @@ fn handleAction(action: Input.Action) void {
             }
         },
         .enter => {
-            if (global_render.error_len != 0) {
-                global_render.error_len = 0;
-                platform.renderModified();
+            if (global_render.err_msg) |*err_msg| {
+                err_msg.unref();
+                global_render.err_msg = null;
+                platform.errModified();
                 return;
             }
             if (global_render.open_file_prompt) |*prompt| {
@@ -291,24 +304,12 @@ fn handleAction(action: Input.Action) void {
 
 // TODO: use a different error reporting mechanism
 // can set error but does not call renderModified
-fn openFile(filename: []const u8) error{Reported}!void {
-    var file = std.fs.cwd().openFile(filename, .{}) catch |err| {
-        global_render.setError("open '{s}' failed, error={s}", .{filename, @errorName(err)});
-        return error.Reported;
-    };
-    defer file.close();
-    const file_size = file.getEndPos() catch |err| {
-        global_render.setError("get file size of '{s}' failed, error={s}", .{filename, @errorName(err)});
-        return error.Reported;
-    };
-    const map = platform.mmap(filename, file, file_size) catch {
-        std.debug.assert(global_render.error_len != 0);
-        return;
-    };
-    errdefer map.deinit();
+fn openFile(filename_borrowed: []const u8) error{Reported}!void {
+    const mapped_file = try MappedFile.init(filename_borrowed, to_global_err, .{});
+    errdefer mapped_file.deinit;
 
-    const name_copy = global.gpa.dupe(u8, filename) catch |e| oom(e);
-    errdefer global.gpa.free(name_copy);
+    var filename = RefString.allocDupe(filename_borrowed) catch |e| oom(e);
+    defer filename.unref();
 
     // initialize the view
     global.row_allocator_instance.deinit();
@@ -316,9 +317,9 @@ fn openFile(filename: []const u8) error{Reported}!void {
     global_render.rows = .{};
 
     {
-        var line_it = std.mem.split(u8, map.mem, "\n");
+        var line_it = std.mem.split(u8, mapped_file.mem, "\n");
         while (line_it.next()) |line| {
-            const offset = @intFromPtr(line.ptr) - @intFromPtr(map.mem.ptr);
+            const offset = @intFromPtr(line.ptr) - @intFromPtr(mapped_file.mem.ptr);
             global_render.rows.append(global.row_allocator, .{ .file_backed = .{
                 .offset = offset,
                 .limit = offset + line.len,
@@ -326,11 +327,10 @@ fn openFile(filename: []const u8) error{Reported}!void {
         }
     }
 
-
     if (global.current_file) |current_file| current_file.deinit();
     global.current_file = .{
-        .map = map,
-        .name = name_copy,
+        .map = mapped_file,
+        .name = filename,
     };
 }
 
