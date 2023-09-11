@@ -77,7 +77,6 @@ pub const Render = struct {
     const max_error_msg = 400;
 
     cursor_pos: ?XY(u16) = .{ .x = 0, .y = 0 },
-    size: XY(u16) = .{ .x = 0, .y = 0 },
     viewport_pos: XY(u32) = .{ .x = 0, .y = 0 },
     viewport_size: XY(u16) = .{ .x = 80, .y = 40 },
     rows: std.ArrayListUnmanaged(Row) = .{},
@@ -143,7 +142,7 @@ fn handleAction(action: Input.Action) void {
             }
 
             if (global_render.cursor_pos) |*cursor_pos| {
-                if (cursor_pos.y >= global_render.size.y) {
+                if (cursor_pos.y >= global_render.rows.items.len) {
                     const needed_len = cursor_pos.y + 1;
                     if (global_render.rows.items.len < needed_len) {
                         std.log.info("adding {} row(s)", .{needed_len - global_render.rows.items.len});
