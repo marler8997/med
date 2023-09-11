@@ -85,12 +85,12 @@ pub const Render = struct {
     error_len: usize = 0,
     error_buf: [max_error_msg]u8 = undefined,
 
-    pub fn getViewportRows(self: *Render) []Row {
+    pub fn getViewportRows(self: Render) []Row {
         if (self.viewport_pos.y >= self.rows.items.len) return &[0]Row{ };
         const avail = self.rows.items.len - self.viewport_pos.y;
         return self.rows.items[self.viewport_pos.y ..][0 .. @min(avail, self.viewport_size.y)];
     }
-    pub fn toViewportPos(self: *Render, pos: XY(u16)) ?XY(u16) {
+    pub fn toViewportPos(self: Render, pos: XY(u16)) ?XY(u16) {
         if (pos.x < self.viewport_pos.x) return null;
         if (pos.y < self.viewport_pos.y) return null;
         if (pos.x >= self.viewport_pos.x + self.viewport_size.x) return null;
@@ -100,7 +100,7 @@ pub const Render = struct {
             .y = @intCast(pos.y - self.viewport_pos.y),
         };
     }
-    pub fn getError(self: *Render) ?[]const u8 {
+    pub fn getError(self: Render) ?[]const u8 {
         if (self.error_len == 0) return null;
         return self.error_buf[0 .. self.error_len];
     }
