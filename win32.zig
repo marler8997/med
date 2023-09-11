@@ -160,11 +160,11 @@ pub fn quit() void {
     // TODO: this message could get lost if we are inside a modal loop I think
     win32.PostQuitMessage(0);
 }
-pub const errModified = renderModified;
-pub fn renderModified() void {
+pub const errModified = viewModified;
+pub fn viewModified() void {
     if (build_options.enable_x11_backend) {
         if (global.x11)
-            return @import("x11.zig").renderModified();
+            return @import("x11.zig").viewModified();
     }
 
     if (win32.TRUE != win32.InvalidateRect(global.hWnd, null, 0))

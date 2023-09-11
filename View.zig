@@ -108,6 +108,78 @@ pub fn getRowSlice(self: View, row_index: usize) []u8 {
     return self.rows.items[row_index].getSlice(self.file);
 }
 
+// returns true if it was able to move the cursor backward
+pub fn cursorBack(self: *View) bool {
+    if (self.cursor_pos) |*cursor_pos| {
+        if (cursor_pos.x == 0) {
+            std.log.info("TODO: implement cursor back wrap", .{});
+            return false;
+        } else {
+            cursor_pos.x -= 1;
+            return true;
+        }
+    }
+    return false;
+}
+
+// returns true if it was able to move the cursor forward
+pub fn cursorForward(self: *View) bool {
+    if (self.cursor_pos) |*cursor_pos| {
+        cursor_pos.x += 1;
+        return true;
+    }
+    return false;
+}
+
+// returns true if it was able to move the cursor up
+pub fn cursorUp(self: *View) bool {
+    if (self.cursor_pos) |*cursor_pos| {
+        if (cursor_pos.y == 0) return false;
+        cursor_pos.y -= 1;
+        return true;
+    }
+    return false;
+}
+
+// returns true if it was able to move the cursor down
+pub fn cursorDown(self: *View) bool {
+    if (self.cursor_pos) |*cursor_pos| {
+        cursor_pos.y += 1;
+        return true;
+    }
+    return false;
+}
+
+// returns true if the cursor moved
+pub fn cursorLineStart(self: *View) bool {
+    if (self.cursor_pos) |*cursor_pos| {
+        if (cursor_pos.x != 0) {
+            cursor_pos.x = 0;
+            return true;
+        }
+    }
+    return false;
+}
+
+// returns true if the cursor moved
+pub fn cursorLineEnd(self: *View) bool {
+    if (self.cursor_pos) |*cursor_pos| {
+        const eol = blk: {
+            // if there is no content, move the cursor back to
+            // the start of the line
+            if (cursor_pos.y >= self.rows.items.len)
+                break :blk 0;
+            break :blk self.rows.items[cursor_pos.y].getLen();
+        };
+        if (cursor_pos.x != eol) {
+            // TODO: what do we do if eol exceed std.math.maxInt(u16)?
+            cursor_pos.x = @intCast(eol);
+            return true;
+        }
+    }
+    return false;
+}
+
 pub fn deleteToEndOfLine(self: *View, row_index: usize, line_offset: usize) error{OutOfMemory}!usize {
     if (row_index >= self.rows.items.len)
         return 0;

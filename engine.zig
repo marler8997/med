@@ -57,7 +57,7 @@ fn handleAction(action: Input.Action) void {
                 }
                 prompt.path_buf[prompt.path_len] = ascii_code;
                 prompt.path_len += 1;
-                platform.renderModified();
+                platform.viewModified();
                 return;
             }
 
@@ -103,7 +103,7 @@ fn handleAction(action: Input.Action) void {
                 std.log.info("setting row {} col {} to '{c}'", .{cursor_pos.y, cursor_pos.x, ascii_code});
                 al.items[cursor_pos.x] = ascii_code;
                 cursor_pos.x += 1;
-                platform.renderModified();
+                platform.viewModified();
             }
         },
         .enter => {
@@ -118,7 +118,7 @@ fn handleAction(action: Input.Action) void {
                     error.Reported => {},
                 };
                 global_view.open_file_prompt = null;
-                platform.renderModified();
+                platform.viewModified();
                 return;
             }
             if (global_view.cursor_pos) |*cursor_pos| {
@@ -149,52 +149,71 @@ fn handleAction(action: Input.Action) void {
                     .x = 0, // TODO: should we try to autodetect tabbing here?
                     .y = cursor_pos.y + 1,
                 };
-                platform.renderModified();
+                platform.viewModified();
                 return;
             }
             std.log.warn("TODO: handle enter with no cursor?", .{});
         },
         .cursor_back => {
-            if (global_view.cursor_pos) |*cursor_pos| {
-                if (cursor_pos.x == 0) {
-                    std.log.info("TODO: implement cursor back wrap", .{});
-                } else {
-                    cursor_pos.x -= 1;
-                    platform.renderModified();
-                }
+            if (global_view.err_msg) |_| {
+                // ignore
+            } else if (global_view.open_file_prompt) |_| {
+                // TODO: make the open file prompt it's own view so
+                //       we can just reuse it's functions for this
+            } else if (global_view.cursorBack()) {
+                platform.viewModified();
             }
         },
         .cursor_forward => {
-            if (global_view.cursor_pos) |*cursor_pos| {
-                cursor_pos.x += 1;
-                platform.renderModified();
+            if (global_view.err_msg) |_| {
+                // ignore
+            } else if (global_view.open_file_prompt) |_| {
+                // TODO: make the open file prompt it's own view so
+                //       we can just reuse it's functions for this
+            } else if (global_view.cursorForward()) {
+                platform.viewModified();
             }
         },
         .cursor_up => {
-            if (global_view.cursor_pos) |*cursor_pos| {
-                if (cursor_pos.y == 0) {
-                    std.log.info("TODO: implement cursor up scroll", .{});
-                } else {
-                    cursor_pos.y -= 1;
-                    platform.renderModified();
-                }
+            if (global_view.err_msg) |_| {
+                // ignore
+            } else if (global_view.open_file_prompt) |_| {
+                // TODO: make the open file prompt it's own view so
+                //       we can just reuse it's functions for this
+            } else if (global_view.cursorUp()) {
+                platform.viewModified();
             }
         },
         .cursor_down => {
-            if (global_view.cursor_pos) |*cursor_pos| {
-                cursor_pos.y += 1;
-                platform.renderModified();
+            if (global_view.err_msg) |_| {
+                // ignore
+            } else if (global_view.open_file_prompt) |_| {
+                // TODO: make the open file prompt it's own view so
+                //       we can just reuse it's functions for this
+            } else if (global_view.cursorDown()) {
+                platform.viewModified();
             }
         },
         .cursor_line_start => {
-            if (global_view.cursor_pos) |*cursor_pos| {
-                if (cursor_pos.x != 0) {
-                    cursor_pos.x = 0;
-                    platform.renderModified();
-                }
+            if (global_view.err_msg) |_| {
+                // ignore
+            } else if (global_view.open_file_prompt) |_| {
+                // TODO: make the open file prompt it's own view so
+                //       we can just reuse it's functions for this
+            } else if (global_view.cursorLineStart()) {
+                platform.viewModified();
             }
         },
-        .cursor_line_end => std.log.info("TODO: implement cursor_line_end", .{}),
+        .cursor_line_end => {
+            if (global_view.err_msg) |_| {
+                // ignore
+            } else if (global_view.open_file_prompt) |_| {
+                // TODO: make the open file prompt it's own view so
+                //       we can just reuse it's functions for this
+            } else if (global_view.cursorLineEnd()) {
+                platform.viewModified();
+            }
+        },
         .open_file => {
             if (global_view.open_file_prompt == null) {
                 global_view.open_file_prompt = .{ .path_len = 0 };
@@ -203,7 +222,7 @@ fn handleAction(action: Input.Action) void {
                 if (path.len + 1 >= prompt.path_buf.len) @panic("handle long cwd");
                 prompt.path_buf[path.len] = std.fs.path.sep;
                 prompt.path_len = path.len + 1;
-                platform.renderModified();
+                platform.viewModified();
             }
         },
         .quit => platform.quit(),
@@ -211,7 +230,7 @@ fn handleAction(action: Input.Action) void {
 }
 
 // TODO: use a different error reporting mechanism
-// can set error but does not call renderModified
+// can set error but does not call viewModified
 fn openFile(filename_borrowed: []const u8) error{Reported}!void {
     const mapped_file = try MappedFile.init(filename_borrowed, to_global_err, .{});
     errdefer mapped_file.deinit;

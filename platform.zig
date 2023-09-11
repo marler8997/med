@@ -13,7 +13,7 @@ pub const go = impl.go;
 // ================================================================================
 pub const quit = impl.quit;
 pub const errModified = impl.errModified;
-pub const renderModified = impl.renderModified;
+pub const viewModified = impl.viewModified;
 // ================================================================================
 // End of the interface for the engine to use
 // ================================================================================

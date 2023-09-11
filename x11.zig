@@ -420,8 +420,8 @@ pub fn quit() void {
     std.log.info("TODO: should we check if there are unsaved changes before exiting?", .{});
     std.os.exit(0);
 }
-pub const errModified = renderModified;
-pub fn renderModified() void {
+pub const errModified = viewModified;
+pub fn viewModified() void {
     // TODO: maybe defer the rendering?
     render() catch |err| std.debug.panic("render failed with error {s}", .{@errorName(err)});
 }
