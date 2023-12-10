@@ -21,13 +21,48 @@ pub const Key = enum {
     control,
     enter,
     backspace,
+    escape,
+    // The rest of the keys are in ASCII order and the engine
+    // guarantees this to make it easier to translate to/from
+    // ascii codes
     space,
+    bang,
+    double_quote,
+    pound,
+    dollar,
+    percent,
+    ampersand,
+    single_quote,
+    open_paren,
+    close_paren,
+    star,
+    plus,
     comma,
+    dash,
     period,
     forward_slash,
     _0, _1, _2, _3, _4, _5, _6, _7, _8, _9,
+    colon,
+    semicolon,
+    open_angle_bracket,
+    equal,
+    close_angle_bracket,
+    question_mark,
+    at,
+    A, B, C, D, E, F, G, H, I, J, K, L, M,
+    N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
+    open_square_bracket,
+    backslash,
+    close_square_bracket,
+    caret,
+    underscore,
+    backtick,
     a, b, c, d, e, f, g, h, i, j, k, l, m,
     n, o, p, q, r, s, t, u, v, w, x, y, z,
+    open_curly,
+    pipe,
+    close_curly,
+    tilda,
 };
 pub const key_count = @typeInfo(Key).Enum.fields.len;
 pub const KeyState = enum { up, down };
@@ -57,17 +92,24 @@ pub fn setKeyState(self: *Input, key: Key, state: KeyState) ?Action {
             },
             .enter => return Action.enter,
             .backspace => return Action.backspace,
-            .space => return Action{ .add_char = ' ' },
-            .comma => return Action{ .add_char = ',' },
-            .period => return Action{ .add_char = '.' },
-            .forward_slash => return Action{ .add_char = '/' },
-            ._0, ._1, ._2, ._3, ._4, ._5, ._6, ._7, ._8, ._9 => |c|
-                return Action{ .add_char = '0' + (@intFromEnum(c) - @intFromEnum(Key._0)) },
+            .escape => return null,
+            .space, .bang, .double_quote, .pound,
+            .dollar, .percent, .ampersand, .single_quote,
+            .open_paren, .close_paren, .star, .plus, .comma,
+            .dash, .period, .forward_slash,
+            ._0, ._1, ._2, ._3, ._4, ._5, ._6, ._7, ._8, ._9,
+            .colon, .semicolon, .open_angle_bracket, .equal,
+            .close_angle_bracket, .question_mark, .at,
+            .A, .B, .C, .D, .E, .F, .G, .H, .I, .J, .K, .L, .M,
+            .N, .O, .P, .Q, .R, .S, .T, .U, .V, .W, .X, .Y, .Z,
+            .open_square_bracket, .backslash, .close_square_bracket,
+            .caret, .underscore, .backtick,
             .a, .b, .c, .d, .e, .f, .g, .h, .i, .j, .k, .l, .m,
             .n, .o, .p, .q, .r, .s, .t, .u, .v, .w, .x, .y, .z,
+            .open_curly, .pipe, .close_curly, .tilda,
             => |c| {
-                const offset: u8 = @intFromEnum(c) - @intFromEnum(Key.a);
-                return Action{ .add_char = 'a' + offset };
+                const offset: u8 = @intFromEnum(c) - @intFromEnum(Key.space);
+                return Action{ .add_char = ' ' + offset };
             },
         }
     } else {
