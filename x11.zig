@@ -29,6 +29,7 @@ const global = struct {
     pub var ids: Ids = undefined;
     pub var font_dims: FontDims = undefined;
     pub var window_content_size = XY(u16){ .x = 400, .y = 400 };
+    pub var view_modified = false;
 };
 
 fn x11KeysymToKey(keysym: x.charset.Combined) ?Input.Key {
@@ -333,6 +334,11 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
     }
 
     while (true) {
+        if (global.view_modified) {
+            try render();
+            global.view_modified = false;
+        }
+
         {
             const recv_buf = buf.nextReadBuffer();
             if (recv_buf.len == 0) {
@@ -444,8 +450,7 @@ pub fn quit() void {
 }
 pub const errModified = viewModified;
 pub fn viewModified() void {
-    // TODO: maybe defer the rendering?
-    render() catch |err| std.debug.panic("render failed with error {s}", .{@errorName(err)});
+    global.view_modified = true;
 }
 // ================================================================================
 // End of the interface for the engine to use
