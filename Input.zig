@@ -13,6 +13,7 @@ pub const Action = union(enum) {
     cursor_line_end,
     backspace,
     open_file,
+    save_file,
     quit,
 };
 
@@ -176,6 +177,10 @@ fn onKeyDownWithControlDown(self: *Input, key: Key) ?Action {
                     .f => {
                         self.control_sequence_len = 0;
                         return .open_file;
+                    },
+                    .s => {
+                        self.control_sequence_len = 0;
+                        return .save_file;
                     },
                     else => {
                         std.log.info("Ctrl-x-{s} unknown", .{@tagName(self.control_sequence_buf[1])});

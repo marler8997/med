@@ -32,16 +32,20 @@ pub fn notifyKeyEvent(key: Input.Key, state: Input.KeyState) void {
 // End of the interface for the platform to use
 // ================================================================================
 
+fn setGlobalError(new_err: RefString) void {
+    if (global_view.err_msg) |m| {
+        m.unref();
+        global_view.err_msg = null;
+    }
+    global_view.err_msg = new_err;
+    new_err.addRef();
+    platform.errModified();
+}
 var to_global_err_instance = struct {
     base: OnErr = .{ .on_err = on_err },
     fn on_err(context: *OnErr, msg: RefString) void {
         _ = context;
-        if (global_view.err_msg) |m| {
-            m.unref();
-            global_view.err_msg = null;
-        }
-        global_view.err_msg = msg;
-        msg.addRef();
+        setGlobalError(msg);
     }
 }{ };
 const to_global_err = &to_global_err_instance.base;
@@ -64,6 +68,7 @@ fn handleAction(action: Input.Action) void {
             => {}, // ignore
             .backspace => {}, // ignore
             .open_file => {}, // ignore
+            .save_file => {}, // ignore
             .quit => platform.quit(),
         }
         return;
@@ -130,7 +135,11 @@ fn handleAction(action: Input.Action) void {
         },
         .enter => {
             if (global_view.open_file_prompt) |*prompt| {
-                openFile(prompt.getPathConst()) catch |e| switch (e) {
+                const filename = RefString.allocDupe(
+                    prompt.getPathConst()
+                ) catch |e| oom(e);
+                defer filename.unref();
+                openFile(filename) catch |e| switch (e) {
                     error.Reported => {},
                 };
                 global_view.open_file_prompt = null;
@@ -235,18 +244,16 @@ fn handleAction(action: Input.Action) void {
                 platform.viewModified();
             }
         },
+        .save_file => saveFile(),
         .quit => platform.quit(),
     }
 }
 
 // TODO: use a different error reporting mechanism
 // can set error but does not call viewModified
-fn openFile(filename_borrowed: []const u8) error{Reported}!void {
-    const mapped_file = try MappedFile.init(filename_borrowed, to_global_err, .{});
-    errdefer mapped_file.deinit;
-
-    var filename = RefString.allocDupe(filename_borrowed) catch |e| oom(e);
-    defer filename.unref();
+fn openFile(filename: RefString) error{Reported}!void {
+    const mapped_file = try MappedFile.init(filename.slice, to_global_err, .{});
+    errdefer mapped_file.unmap();
 
     // initialize the view
     global_view.deinit();
@@ -265,6 +272,91 @@ fn openFile(filename_borrowed: []const u8) error{Reported}!void {
 
     if (global_view.file) |file| file.close();
     global_view.file = View.OpenFile.initAndNameAddRef(mapped_file, filename);
+}
+
+fn saveFile() void {
+    if (global_view.open_file_prompt != null)
+        return;
+
+    {
+        var normalized = false;
+        const has_changes = global_view.hasChanges(&normalized);
+        if (normalized) {
+            platform.viewModified();
+        }
+        if (!has_changes) {
+            std.log.info("no changes to save", .{});
+            return;
+        }
+    }
+
+    const file = global_view.file orelse return setGlobalError(
+        RefString.allocDupe(
+            "Not Implemented: saveToDisk for a view without a file"
+        ) catch |e| oom(e)
+    );
+
+    var path_buf: [std.fs.MAX_PATH_BYTES + 1]u8 = undefined;
+    const tmp_filename = std.fmt.bufPrint(
+        &path_buf,
+        "{s}.med-saving",
+        .{file.name.slice},
+    ) catch |err| switch (err) { error.NoSpaceLeft => {
+        setGlobalError(RefString.allocDupe(
+            "saveToDisk error: file path too long"
+        ) catch |e| oom(e));
+        platform.errModified();
+        return;
+    }};
+
+    if (writeViewToFile(tmp_filename, global_view)) |err| {
+        setGlobalError(err);
+        platform.errModified();
+        return;
+    }
+
+    std.fs.cwd().rename(
+        tmp_filename, file.name.slice
+    ) catch |err| {
+        setGlobalError(RefString.allocFmt(
+            "rename tmp file failed with {s}", .{@errorName(err)}
+        ) catch |e| oom(e));
+        platform.errModified();
+        return;
+    };
+
+    const save_filename = file.name;
+    save_filename.addRef();
+    defer save_filename.unref();
+
+    const save_cursor_pos = global_view.cursor_pos;
+    const save_viewport_pos = global_view.viewport_pos;
+
+    global_view.deinit();
+    global_view = View.init();
+    platform.viewModified();
+
+    openFile(save_filename) catch |err| switch (err) {
+        error.Reported => return,
+    };
+
+    global_view.cursor_pos = save_cursor_pos;
+    global_view.viewport_pos = save_viewport_pos;
+}
+
+// returns an optional error
+fn writeViewToFile(filename: []const u8, view: View) ?RefString {
+    var file = std.fs.cwd().createFile(
+        filename, .{}
+    ) catch |err| return RefString.allocFmt(
+        "createFile '{s}' failed with {s}",
+        .{filename, @errorName(err)},
+    ) catch |e| oom(e);
+    defer file.close();
+    view.writeContents(file.writer()) catch |err| return RefString.allocFmt(
+        "write to file '{s}' failed with {s}", .{filename, @errorName(err)}
+    ) catch |e| oom(e);
+    return null;
 }
 
 // after calling, guarantees that global_view.rows[row_index] is

@@ -10,6 +10,7 @@ file: ?OpenFile = null,
 rows: std.ArrayListUnmanaged(Row) = .{},
 cursor_pos: ?XY(u16) = .{ .x = 0, .y = 0 },
 viewport_pos: XY(u32) = .{ .x = 0, .y = 0 },
+// TODO: viewport_size should not be apart of View
 viewport_size: XY(u16) = .{ .x = 80, .y = 40 },
 open_file_prompt: ?OpenFilePrompt = null,
 err_msg: ?RefString = null,
@@ -19,8 +20,16 @@ pub fn init() View {
         .arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator),
     };
 }
-pub fn deinit(self: View) void {
+pub fn deinit(self: *View) void {
+    if (self.err_msg) |err_msg| {
+        err_msg.unref();
+    }
+    if (self.file) |file| {
+        file.close();
+    }
+    // no need to deinit "rows" because of arena
     self.arena_instance.deinit();
+    self.* = undefined;
 }
 
 // TODO: make this private once I move more code into this file
@@ -230,6 +239,59 @@ pub fn deleteToEndOfLine(self: *View, row_index: usize, line_offset: usize) erro
             al.items.len = line_offset;
             return remove_len;
         },
+    }
+}
+
+pub fn hasChanges(self: *View, normalized: *bool) bool {
+    const file = self.file orelse return true;
+
+    var next_row_offset: usize = 0;
+    for (self.rows.items, 0..) |row, row_index| {
+        switch (row) {
+            .file_backed => |fb| {
+                if (fb.limit == file.map.mem.len) {
+                    next_row_offset = std.math.maxInt(usize);
+                } else {
+                    std.debug.assert(file.map.mem[fb.limit] == '\n');
+                    next_row_offset = fb.limit + 1;
+                }
+            },
+            .array_list_backed => |al| {
+                const fb_mem_remaining = file.map.mem[next_row_offset..];
+                if (al.items.len > fb_mem_remaining.len)
+                    return true;
+                if (al.items.len < fb_mem_remaining.len) {
+                    if (fb_mem_remaining[al.items.len] != '\n')
+                        return true;
+                }
+                const fb_mem = fb_mem_remaining[0..al.items.len];
+                if (std.mem.eql(u8, fb_mem, al.items)) {
+                    std.log.info("REVERTING ArrayListBacked to FileBacked '{s}'", .{fb_mem});
+                    normalized.* = true;
+                    self.rows.items[row_index] = .{
+                        .file_backed = .{
+                            .offset = next_row_offset,
+                            .limit = next_row_offset + fb_mem.len,
+                        },
+                    };
+                    continue;
+                }
+                return true;
+            },
+        }
+    }
+    return false;
+}
+
+pub fn writeContents(self: View, writer: anytype) !void {
+    for (self.rows.items) |row| {
+        switch (row) {
+            .file_backed => |fb| try writer.writeAll(
+                self.file.?.map.mem[fb.offset..fb.limit]
+            ),
+            .array_list_backed => |al| try writer.writeAll(al.items),
+        }
+        try writer.writeAll("\n");
     }
 }
 
