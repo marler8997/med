@@ -102,8 +102,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
     global.hWnd = win32.CreateWindowEx(
         window_style_ex,
         CLASS_NAME, // Window class
-        // TODO: use the image name in the title if we have one
-        L("Image Viewer"),
+        L("Med"),
         window_style,
         CW_USEDEFAULT, CW_USEDEFAULT, // position
         0, 0, // size
