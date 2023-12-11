@@ -31,52 +31,14 @@ const global = struct {
     pub var window_content_size = XY(u16){ .x = 400, .y = 400 };
 };
 
-fn x11Key(set: x.Charset, code: u8) ?Input.Key {
-    return switch (set) {
-        .latin1 => switch (code) {
-            @intFromEnum(x.charset.Latin1.space) => .space,
-            @intFromEnum(x.charset.Latin1.comma) => .comma,
-            @intFromEnum(x.charset.Latin1.period) => .period,
-            @intFromEnum(x.charset.Latin1.slash) => .forward_slash,
-            @intFromEnum(x.charset.Latin1.digit_zero) => ._0,
-            @intFromEnum(x.charset.Latin1.digit_one) => ._1,
-            @intFromEnum(x.charset.Latin1.digit_two) => ._2,
-            @intFromEnum(x.charset.Latin1.digit_three) => ._3,
-            @intFromEnum(x.charset.Latin1.digit_four) => ._4,
-            @intFromEnum(x.charset.Latin1.digit_five) => ._5,
-            @intFromEnum(x.charset.Latin1.digit_six) => ._6,
-            @intFromEnum(x.charset.Latin1.digit_seven) => ._7,
-            @intFromEnum(x.charset.Latin1.digit_eight) => ._8,
-            @intFromEnum(x.charset.Latin1.digit_nine) => ._9,
-            @intFromEnum(x.charset.Latin1.a) => .a,
-            @intFromEnum(x.charset.Latin1.b) => .b,
-            @intFromEnum(x.charset.Latin1.c) => .c,
-            @intFromEnum(x.charset.Latin1.d) => .d,
-            @intFromEnum(x.charset.Latin1.e) => .e,
-            @intFromEnum(x.charset.Latin1.f) => .f,
-            @intFromEnum(x.charset.Latin1.g) => .g,
-            @intFromEnum(x.charset.Latin1.h) => .h,
-            @intFromEnum(x.charset.Latin1.i) => .i,
-            @intFromEnum(x.charset.Latin1.j) => .j,
-            @intFromEnum(x.charset.Latin1.k) => .k,
-            @intFromEnum(x.charset.Latin1.l) => .l,
-            @intFromEnum(x.charset.Latin1.m) => .m,
-            @intFromEnum(x.charset.Latin1.n) => .n,
-            @intFromEnum(x.charset.Latin1.o) => .o,
-            @intFromEnum(x.charset.Latin1.p) => .p,
-            @intFromEnum(x.charset.Latin1.q) => .q,
-            @intFromEnum(x.charset.Latin1.r) => .r,
-            @intFromEnum(x.charset.Latin1.s) => .s,
-            @intFromEnum(x.charset.Latin1.t) => .t,
-            @intFromEnum(x.charset.Latin1.u) => .u,
-            @intFromEnum(x.charset.Latin1.v) => .v,
-            @intFromEnum(x.charset.Latin1.w) => .w,
-            @intFromEnum(x.charset.Latin1.x) => .x,
-            @intFromEnum(x.charset.Latin1.y) => .y,
-            @intFromEnum(x.charset.Latin1.z) => .z,
-            else => null,
+fn x11KeysymToKey(keysym: x.charset.Combined) ?Input.Key {
+    return switch (keysym.charset()) {
+        .latin1 => return switch (keysym.code()) {
+            0 ... 31 => null,
+            ' ' ... '~' => |c| @enumFromInt(@intFromEnum(Input.Key.space) + (c - ' ')),
+            127 ... 255 => null,
         },
-        .keyboard => switch (code) {
+        .keyboard => switch (keysym.code()) {
             @intFromEnum(x.charset.Keyboard.backspace_back_space_back_char) => .backspace,
             @intFromEnum(x.charset.Keyboard.return_enter) => .enter,
             @intFromEnum(x.charset.Keyboard.left_control) => .control,
@@ -107,6 +69,106 @@ pub fn rgbToX(rgb: color.Rgb, depth_bits: u8) u32 {
         else => @panic("todo"),
     };
 }
+
+// ================================================================================
+// TODO: move this stuff into zigx
+// ================================================================================
+// Every Keycode has a standard mapping to 4 possible symbols:
+//
+//      Group 1       Group 2
+//         |             |
+//      |------|      |------|
+//     Sym0   Sym1   Sym2   Sym3
+//      |      |      |      |
+//    lower  upper  lower  upper
+//
+// The presence of any modifier flag (Mod1 through Mod5) indicates
+// Group 2 should be used instead of Group 1.
+//
+// The "shift/caps lock" flag indicates the second symbol in the group
+// should be used instead of the first.
+//
+// The Keymap may include less or more than 4 symbols per code.  More than
+// 4 entries are for non-standard mappings, less than 4 can be interpreted
+// as 4 using the following mapping:
+//
+//      |  Sym0  |   Sym1   |  Sym2   |   Sym3   |
+//   ---------------------------------------------
+//    1 |  first | NoSymbol |  first  | NoSymbol |
+//    2 |  first |  second  |  first  |  second  |
+//    3 |  first |  second  |  third  | NoSymbol |
+//
+// NOTE: A group of the form
+//    Keysym NoSymbol
+// Is the same as:
+//    lowercase(Keysym) uppercase(Keysym)
+//
+pub const KeycodeMod = enum(u2) {
+    lower,
+    upper,
+    lower_mod,
+    upper_mod,
+    pub fn init(state: u16) KeycodeMod {
+        var result: u2 = 0;
+        if (0 != (state & 1)) result += 1; // Shift flag
+        if (0 != (state & 0xf8)) result += 2; // Mod1-Mod5 flags mask
+        return @enumFromInt(result);
+    }
+};
+fn keymapEntrySyms(syms_per_code: u8, syms: []u32) [4]x.charset.Combined {
+    std.debug.assert(syms.len >= syms_per_code);
+    switch (syms_per_code) {
+        0 => @panic("keymap syms_per_code can't be 0"),
+        1 => @panic("todo"),
+        2 => @panic("todo"),
+        3 => @panic("todo"),
+        4 ... 255 => return [4]x.charset.Combined{
+            @enumFromInt(syms[0] & 0xffff),
+            @enumFromInt(syms[1] & 0xffff),
+            @enumFromInt(syms[2] & 0xffff),
+            @enumFromInt(syms[3] & 0xffff),
+        },
+    }
+}
+const Keymap = struct {
+    map: [248][4]x.charset.Combined,
+    pub fn initVoid() Keymap {
+        var result: Keymap = undefined;
+        for (&result.map) |*entry_ref| {
+            // TODO: initialize to VoidSymbol instead of 0
+            entry_ref.* = [1]x.charset.Combined{ @enumFromInt(0) } ** 4;
+        }
+        return result;
+    }
+    pub fn load(
+        self: *Keymap,
+        min_keycode: u8,
+        keymap: x.keymap.Keymap,
+    ) void {
+        if (min_keycode < 8)
+            std.debug.panic("min_keycode is too small {}", .{min_keycode});
+        if (keymap.keycode_count > 248)
+            std.debug.panic("keymap has too many keycodes {}", .{keymap.keycode_count});
+        if (keymap.syms_per_code == 0)
+            @panic("keymap syms_per_code cannot be 0");
+
+        std.log.info("Keymap: syms_per_code={} total_syms={}", .{keymap.syms_per_code, keymap.syms.len});
+        var keycode_index: usize = 0;
+        var sym_offset: usize = 0;
+        while (keycode_index < keymap.keycode_count) : (keycode_index += 1) {
+            const keycode: u8 = @intCast(min_keycode + keycode_index);
+            self.map[keycode - 8] = keymapEntrySyms(
+                keymap.syms_per_code,
+                keymap.syms[sym_offset..],
+            );
+            sym_offset += keymap.syms_per_code;
+        }
+    }
+    pub fn getKeysym(self: Keymap, keycode: u8, mod: KeycodeMod) x.charset.Combined {
+        if (keycode < 8) @panic("invalid keycode");
+        return self.map[keycode - 8][@intFromEnum(mod)];
+    }
+};
 
 pub fn go(cmdline_opt: CmdlineOpt) !void {
     _ = cmdline_opt;
@@ -143,57 +205,12 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
 
     // TODO: maybe need to call conn.setup.verify or something?
 
-
-    var keycode_map = std.AutoHashMapUnmanaged(u8, Input.Key){};
+    var keymap = Keymap.initVoid();
     {
-        const keymap = try x.keymap.request(gpa, conn.sock, conn.setup.fixed().*);
-        defer keymap.deinit(gpa);
-        std.log.info("Keymap: syms_per_code={} total_syms={}", .{keymap.syms_per_code, keymap.syms.len});
-        {
-            var i: usize = 0;
-            var sym_offset: usize = 0;
-            while (i < keymap.keycode_count) : (i += 1) {
-                const keycode: u8 = @intCast(conn.setup.fixed().min_keycode + i);
-                var j: usize = 0;
-                while (j < keymap.syms_per_code) : (j += 1) {
-                    const sym = keymap.syms[sym_offset];
-                    if (sym == 0) {
-                        //std.log.info("{}-{}: nothing", .{keycode, j});
-                    } else {
-                        const set_u8: u8 = @intCast((sym >> 8) & 0xff);
-                        const set_opt: ?x.Charset = x.Charset.fromInt(set_u8);
-                        const code: u8 = @intCast(sym & 0xff);
-                        const set_name = if (set_opt) |set| @tagName(set) else "?";
-                        const code_name = if (set_opt) |set| getCodeName(set, code) orelse "?" else "?";
-                        //std.log.info("{}-{}: 0x{x} set {s}({}) code {s}({})", .{keycode, j, sym, set_name, set_u8, code_name, code});
-
-                        if (set_opt) |set| {
-                            if (x11Key(set, code)) |key| {
-                                std.log.info("keycode {}: set {s}({}) code {s}({}) key {s}", .{
-                                    keycode,
-                                    set_name,
-                                    set_u8,
-                                    code_name,
-                                    code,
-                                    @tagName(key),
-                                });
-                                const entry = try keycode_map.getOrPut(gpa, keycode);
-                                if (entry.found_existing) {
-                                    if (entry.value_ptr.* != key) {
-                                        std.debug.panic("keycode {} maps to muliple keys? {s} and {s}", .{keycode, @tagName(entry.value_ptr.*), @tagName(key)});
-                                    }
-                                } else {
-                                    entry.value_ptr.* = key;
-                                }
-                            }
-                        }
-                    }
-                    sym_offset += 1;
-                }
-            }
-        }
+        const keymap_response = try x.keymap.request(gpa, conn.sock, conn.setup.fixed().*);
+        defer keymap_response.deinit(gpa);
+        keymap.load(conn.setup.fixed().min_keycode, keymap_response);
     }
-
 
     {
         var msg_buf: [x.create_window.max_len]u8 = undefined;
@@ -348,14 +365,18 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
                     return error.TodoHandleReplyMessage;
                 },
                 .key_press => |msg| {
-                    std.log.info("key_press: keycode={}", .{msg.keycode});
-                    if (keycode_map.get(msg.keycode)) |key| {
+                    const mod = KeycodeMod.init(msg.state);
+                    //std.log.info("key_press: keycode={} mod={s}", .{msg.keycode, @tagName(mod)});
+                    const keysym = keymap.getKeysym(msg.keycode, mod);
+                    if (x11KeysymToKey(keysym)) |key| {
                         engine.notifyKeyEvent(key, .down);
                     }
                 },
                 .key_release => |msg| {
-                    std.log.info("key_release: keycode={}", .{msg.keycode});
-                    if (keycode_map.get(msg.keycode)) |key| {
+                    const mod = KeycodeMod.init(msg.state);
+                    //std.log.info("key_release: keycode={} mod={s}", .{msg.keycode, @tagName(mod)});
+                    const keysym = keymap.getKeysym(msg.keycode, mod);
+                    if (x11KeysymToKey(keysym)) |key| {
                         engine.notifyKeyEvent(key, .up);
                     }
                 },
