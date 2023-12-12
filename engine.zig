@@ -19,18 +19,57 @@ const global = struct {
     pub var input: Input = .{};
 };
 
-
 // ================================================================================
 // The interface for the platform to use
 // ================================================================================
+pub const global_status = struct {
+    pub const max_len = 80;
+    var buf: [max_len]u8 = undefined;
+    pub var len: std.math.IntFittingRange(0, max_len) = 0;
+    pub fn slice() []const u8 {
+        return buf[0 .. len];
+    }
+};
 pub var global_view = View.init();
 pub fn notifyKeyEvent(key: Input.Key, state: Input.KeyState) void {
     if (global.input.setKeyState(key, state)) |action|
         handleAction(action);
+
+    {
+        var buf: [global_status.max_len]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        if (global.input.formatStatus(fbs.writer())) {
+            setGlobalStatus(buf[0..fbs.pos], .{});
+        } else |err| switch (err) {
+            error.NoSpaceLeft => setGlobalStatus("status too big!", .{}),
+        }
+    }
 }
 // ================================================================================
 // End of the interface for the platform to use
 // ================================================================================
+
+pub fn setGlobalStatus(new_status: []const u8, opt: struct {
+    check_if_equal: bool = true,
+}) void {
+    if (opt.check_if_equal) {
+        if (std.mem.eql(u8, global_status.slice(), new_status))
+            return;
+    }
+
+    if (new_status.len > global_status.max_len) {
+        @memcpy(
+            global_status.buf[0 .. global_status.max_len - 3],
+            new_status[0 .. global_status.max_len - 3],
+        );
+        @memcpy(global_status.buf[global_status.max_len - 3..], "...");
+        global_status.len = global_status.max_len;
+    } else {
+        @memcpy(global_status.buf[0 .. new_status.len], new_status);
+        global_status.len = @intCast(new_status.len);
+    }
+    platform.statusModified();
+}
 
 fn setGlobalError(new_err: RefString) void {
     if (global_view.err_msg) |m| {

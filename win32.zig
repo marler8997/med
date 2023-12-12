@@ -31,6 +31,7 @@ const global = struct {
     pub var x11: if (build_options.enable_x11_backend) bool else void = undefined;
     pub var brush_bg_void: win32.HBRUSH = undefined;
     pub var brush_bg_content: win32.HBRUSH = undefined;
+    pub var brush_bg_status: win32.HBRUSH = undefined;
     pub var brush_bg_menu: win32.HBRUSH = undefined;
     pub var hFont: win32.HFONT = undefined;
     pub var hWnd: win32.HWND = undefined;
@@ -68,6 +69,8 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
     global.brush_bg_void = win32.CreateSolidBrush(toColorRef(color.bg_void)) orelse
         fatal("CreateSolidBrush failed, error={}", .{win32.GetLastError()});
     global.brush_bg_content = win32.CreateSolidBrush(toColorRef(color.bg_content)) orelse
+        fatal("CreateSolidBrush failed, error={}", .{win32.GetLastError()});
+    global.brush_bg_status = win32.CreateSolidBrush(toColorRef(color.bg_status)) orelse
         fatal("CreateSolidBrush failed, error={}", .{win32.GetLastError()});
     global.brush_bg_menu = win32.CreateSolidBrush(toColorRef(color.bg_menu)) orelse
         fatal("CreateSolidBrush failed, error={}", .{win32.GetLastError()});
@@ -163,6 +166,10 @@ pub fn quit() void {
     // TODO: this message could get lost if we are inside a modal loop I think
     win32.PostQuitMessage(0);
 }
+
+// NOTE: for now we'll just repaint the whole window
+//       no matter what is modified
+pub const statusModified = viewModified;
 pub const errModified = viewModified;
 pub fn viewModified() void {
     if (build_options.enable_x11_backend) {
@@ -315,6 +322,7 @@ fn paint(hWnd: HWND) void {
     const hdc = win32.BeginPaint(hWnd, &ps);
 
     const client_size = getClientSize(hWnd);
+    const status_y = client_size.y - global.font_size.y;
 
     // NOTE: clearing the entire window first causes flickering
     //       see https://catch22.net/tuts/win32/flicker-free-drawing/
@@ -323,7 +331,7 @@ fn paint(hWnd: HWND) void {
     if (erase_bg) {
         const rect = win32.RECT{
             .left = 0, .top = 0,
-            .right = client_size.x, .bottom = client_size.y,
+            .right = client_size.x, .bottom = status_y,
         };
         _ = win32.FillRect(hdc, &rect, global.brush_bg_void);
     }
@@ -356,12 +364,12 @@ fn paint(hWnd: HWND) void {
 
     if (!erase_bg) {
         const end_of_file_y: usize = viewport_rows.len * global.font_size.y;
-        if (end_of_file_y < client_size.y) {
+        if (end_of_file_y < status_y) {
             const rect = win32.RECT{
                 .left = 0,
                 .top = @intCast(end_of_file_y),
                 .right = client_size.x,
-                .bottom = client_size.y,
+                .bottom = status_y,
             };
             _ = win32.FillRect(hdc, &rect, global.brush_bg_void);
         }
@@ -413,6 +421,32 @@ fn paint(hWnd: HWND) void {
         const msg = "Error:";
         _ = win32.TextOutA(hdc, 0, 0 * global.font_size.y, msg, msg.len);
         _ = win32.TextOutA(hdc, 0, 1 * global.font_size.y, @ptrCast(err_msg.slice.ptr), @intCast(err_msg.slice.len));
+    }
+
+    {
+        const status = engine.global_status.slice();
+        _ = win32.SetBkColor(hdc, toColorRef(color.bg_status));
+        _ = win32.SetTextColor(hdc, toColorRef(color.fg_status));
+        if (0 == win32.TextOutA(
+            hdc,
+            0, status_y,
+            @ptrCast(status.ptr), // todo: win32 api shouldn't require null terminator
+            @intCast(status.len),
+        ))
+            std.debug.panic("TextOut failed, error={}", .{win32.GetLastError()});
+
+        {
+            const end_of_line_x: usize = @as(usize, engine.global_status.len) * @as(usize, global.font_size.x);
+            if (end_of_line_x < client_size.x) {
+                const rect = win32.RECT{
+                    .left = @intCast(end_of_line_x),
+                    .top = status_y,
+                    .right = client_size.x,
+                    .bottom = client_size.y,
+                };
+                _ = win32.FillRect(hdc, &rect, global.brush_bg_status);
+            }
+        }
     }
 
     _ = win32.EndPaint(hWnd, &ps);
