@@ -29,7 +29,8 @@ const window_style = win32.WS_OVERLAPPEDWINDOW;
 
 const global = struct {
     pub var x11: if (build_options.enable_x11_backend) bool else void = undefined;
-    pub var brush_bg: win32.HBRUSH = undefined;
+    pub var brush_bg_void: win32.HBRUSH = undefined;
+    pub var brush_bg_content: win32.HBRUSH = undefined;
     pub var brush_bg_menu: win32.HBRUSH = undefined;
     pub var hFont: win32.HFONT = undefined;
     pub var hWnd: win32.HWND = undefined;
@@ -64,7 +65,9 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         }
     }
 
-    global.brush_bg = win32.CreateSolidBrush(toColorRef(color.bg)) orelse
+    global.brush_bg_void = win32.CreateSolidBrush(toColorRef(color.bg_void)) orelse
+        fatal("CreateSolidBrush failed, error={}", .{win32.GetLastError()});
+    global.brush_bg_content = win32.CreateSolidBrush(toColorRef(color.bg_content)) orelse
         fatal("CreateSolidBrush failed, error={}", .{win32.GetLastError()});
     global.brush_bg_menu = win32.CreateSolidBrush(toColorRef(color.bg_menu)) orelse
         fatal("CreateSolidBrush failed, error={}", .{win32.GetLastError()});
@@ -312,16 +315,23 @@ fn paint(hWnd: HWND) void {
     const hdc = win32.BeginPaint(hWnd, &ps);
 
     const client_size = getClientSize(hWnd);
-    {
-        // hbrBackground is null so we draw our own background for now
-        const rect = win32.RECT{ .left = 0, .top = 0, .right = client_size.x, .bottom = client_size.y };
-        _ = win32.FillRect(hdc, &rect, global.brush_bg);
+
+    // NOTE: clearing the entire window first causes flickering
+    //       see https://catch22.net/tuts/win32/flicker-free-drawing/
+    //       TLDR; don't draw over the same pixel twice
+    var erase_bg = false;
+    if (erase_bg) {
+        const rect = win32.RECT{
+            .left = 0, .top = 0,
+            .right = client_size.x, .bottom = client_size.y,
+        };
+        _ = win32.FillRect(hdc, &rect, global.brush_bg_void);
     }
 
     const viewport_rows = engine.global_view.getViewportRows();
 
     _ = win32.SelectObject(hdc, global.hFont);
-    _ = win32.SetBkColor(hdc, toColorRef(color.bg));
+    _ = win32.SetBkColor(hdc, toColorRef(color.bg_content));
     _ = win32.SetTextColor(hdc, toColorRef(color.fg));
     for (viewport_rows, 0..) |row, row_index| {
         const y: i32 = @intCast(row_index * global.font_size.y);
@@ -329,6 +339,32 @@ fn paint(hWnd: HWND) void {
         // NOTE: for now we only support ASCII
         if (0 == win32.TextOutA(hdc, 0, y, @ptrCast(row_str), @intCast(row_str.len)))
             std.debug.panic("TextOut failed, error={}", .{win32.GetLastError()});
+
+        if (!erase_bg) {
+            const end_of_line_x: usize = row_str.len * global.font_size.x;
+            if (end_of_line_x < client_size.x) {
+                const rect = win32.RECT{
+                    .left = @intCast(end_of_line_x),
+                    .top = y,
+                    .right = client_size.x,
+                    .bottom = y + global.font_size.y,
+                };
+                _ = win32.FillRect(hdc, &rect, global.brush_bg_void);
+            }
+        }
+    }
+
+    if (!erase_bg) {
+        const end_of_file_y: usize = viewport_rows.len * global.font_size.y;
+        if (end_of_file_y < client_size.y) {
+            const rect = win32.RECT{
+                .left = 0,
+                .top = @intCast(end_of_file_y),
+                .right = client_size.x,
+                .bottom = client_size.y,
+            };
+            _ = win32.FillRect(hdc, &rect, global.brush_bg_void);
+        }
     }
 
     // draw cursor

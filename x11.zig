@@ -227,7 +227,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
             .visual_id = screen.root_visual,
             }, .{
             //            .bg_pixmap = .copy_from_parent,
-            .bg_pixel = rgbToX(color.bg, screen.root_depth),
+            .bg_pixel = rgbToX(color.bg_content, screen.root_depth),
             //            //.border_pixmap =
             //            .border_pixel = 0x01fa8ec9,
             //            .bit_gravity = .north_west,
@@ -263,7 +263,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
     try createGc(
         screen.root,
         global.ids.gc_bg_fg(),
-        rgbToX(color.bg, screen.root_depth),
+        rgbToX(color.bg_content, screen.root_depth),
         rgbToX(color.fg, screen.root_depth),
     );
     try createGc(
