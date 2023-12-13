@@ -241,6 +241,12 @@ pub fn deleteToEndOfLine(self: *View, row_index: usize, line_offset: usize) erro
     }
 }
 
+pub fn killLine(self: *View) bool {
+    _ = self;
+    std.log.err("killLine not implemented", .{});
+    return false;
+}
+
 pub fn hasChanges(self: *View, normalized: *bool) bool {
     const file = self.file orelse return true;
 

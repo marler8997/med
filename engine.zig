@@ -107,6 +107,7 @@ fn handleAction(action: Input.Action) void {
             => {}, // ignore
             .delete => {}, // ignore
             .backspace => {}, // ignore
+            .kill_line => {}, // ignore
             .open_file => {}, // ignore
             .save_file => {}, // ignore
             .quit => platform.quit(),
@@ -273,8 +274,17 @@ fn handleAction(action: Input.Action) void {
             }
         },
         .backspace => {
-            if (global_view.cursorBack()) {
-                _ = global_view.delete(.from_backspace) catch |e| oom(e);
+            if (global_view.open_file_prompt) |_| {
+                std.log.info("todo: implement backspace for file prompt", .{});
+            } else {
+                if (global_view.cursorBack()) {
+                    _ = global_view.delete(.from_backspace) catch |e| oom(e);
+                    platform.viewModified();
+                }
+            }
+        },
+        .kill_line => {
+            if (global_view.killLine()) {
                 platform.viewModified();
             }
         },
