@@ -64,6 +64,14 @@ pub const Key = enum {
     pipe,
     close_curly,
     tilda,
+
+    pub fn lower(self: Key) Key {
+        return switch (@intFromEnum(self)) {
+            @intFromEnum(Key.A) ... @intFromEnum(Key.Z) => |c|
+                @enumFromInt(c + (@intFromEnum(Key.a) - @intFromEnum(Key.A))),
+            else => self,
+        };
+    }
 };
 pub const key_count = @typeInfo(Key).Enum.fields.len;
 pub const KeyState = enum { up, down };
