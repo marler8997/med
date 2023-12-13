@@ -198,8 +198,7 @@ pub fn delete(self: *View, opt: DeleteOption) error{OutOfMemory}!bool {
         const row_len = row.getLen();
         if (cursor_pos.x >= row_len) switch (opt) {
             .from_backspace => return false,
-            .not_from_backspace =>
-                @panic("TODO: delete past current line content?"),
+            .not_from_backspace => std.log.err("TODO: implement delete at end of line", .{}),
         } else switch (row.*) {
             .file_backed => |fb| {
                 const str = self.file.?.map.mem[fb.offset..fb.limit];

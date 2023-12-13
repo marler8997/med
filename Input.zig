@@ -11,6 +11,7 @@ pub const Action = union(enum) {
     cursor_down,
     cursor_line_start,
     cursor_line_end,
+    delete,
     backspace,
     open_file,
     save_file,
@@ -166,6 +167,7 @@ fn onKeyDownWithControlDown(self: *Input, key: Key) ?Action {
             1 => switch (self.control_sequence_buf[0]) {
                 .a => .{ .action = .cursor_line_start },
                 .b => .{ .action = .cursor_back },
+                .d => .{ .action = .delete },
                 .e => .{ .action = .cursor_line_end },
                 .f => .{ .action = .cursor_forward },
                 .n => .{ .action = .cursor_down },
