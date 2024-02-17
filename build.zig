@@ -1,29 +1,18 @@
 const std = @import("std");
-const GitRepoStep = @import("GitRepoStep.zig");
 
-pub fn build(b: *std.build.Builder) void {
+pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const is_windows = target.getOs().tag == .windows;
     const enable_x11_backend = blk: {
         if (b.option(bool, "x11", "enable the x11 backend")) |opt| break :blk opt;
         break :blk true;
     };
 
-    const zigwin32_repo = GitRepoStep.create(b, .{
-        .url = "https://github.com/marlersoft/zigwin32",
-        .branch = "15.0.2-preview",
-        .sha = "007649ade45ffb544de3aafbb112de25064d3d92",
-        .fetch_enabled = true,
-    });
-
     const build_options = b.addOptions();
     build_options.addOption(bool, "enable_x11_backend", enable_x11_backend);
 
-    const zigwin32 = b.addModule("win32", .{
-        .source_file = .{ .path = b.pathJoin(&.{zigwin32_repo.path, "win32.zig"}), },
-    });
+    const zigwin32_dep = b.dependency("zigwin32", .{});
 
     const exe = b.addExecutable(.{
         .name = "med",
@@ -32,16 +21,15 @@ pub fn build(b: *std.build.Builder) void {
         .optimize = optimize,
         .single_threaded = true,
     });
-    exe.addOptions("build_options", build_options);
+    exe.root_module.addOptions("build_options", build_options);
 
     if (enable_x11_backend) {
         const zigx_dep = b.dependency("zigx", .{});
-        exe.addModule("x", zigx_dep.module("zigx"));
+        exe.root_module.addImport("x", zigx_dep.module("zigx"));
     }
-    if (is_windows) {
+    if (target.result.os.tag == .windows) {
         exe.subsystem = .Windows;
-        exe.step.dependOn(&zigwin32_repo.step);
-        exe.addModule("win32", zigwin32);
+        exe.root_module.addImport("win32", zigwin32_dep.module("zigwin32"));
     }
 
     b.installArtifact(exe);

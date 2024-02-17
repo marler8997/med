@@ -24,7 +24,7 @@ const HWND = win32.HWND;
 
 const XY = @import("xy.zig").XY;
 
-const window_style_ex = win32.WINDOW_EX_STYLE.initFlags(.{});
+const window_style_ex = win32.WINDOW_EX_STYLE{};
 const window_style = win32.WS_OVERLAPPEDWINDOW;
 
 const global = struct {
@@ -80,32 +80,32 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         win32.FW_NORMAL, // weight
         0, 0, 0, // italic, underline, strikeout
         0, // charset
-        .DEFAULT_PRECIS, .DEFAULT_PRECIS, // outprecision, clipprecision
+        .DEFAULT_PRECIS, .{ }, // outprecision, clipprecision
         .PROOF_QUALITY, // quality
         .MODERN, // pitch and family
         L("SYSTEM_FIXED_FONT"), // face name
     ) orelse fatal("CreateFont failed, error={}", .{win32.GetLastError()});
 
     const CLASS_NAME = L("Med");
-    const wc = win32.WNDCLASS{
-        .style = @enumFromInt(0),
+    const wc = win32.WNDCLASSW{
+        .style = .{},
         .lpfnWndProc = WindowProc,
         .cbClsExtra = 0,
         .cbWndExtra = 0,
-        .hInstance = win32.GetModuleHandle(null),
+        .hInstance = win32.GetModuleHandleW(null),
         .hIcon = null,
         .hCursor = null,
         .hbrBackground = null,
         .lpszMenuName = null,
         .lpszClassName = CLASS_NAME,
     };
-    const class_id = win32.RegisterClass(&wc);
+    const class_id = win32.RegisterClassW(&wc);
     if (class_id == 0) {
         std.log.err("RegisterClass failed, error={}", .{win32.GetLastError()});
         std.os.exit(0xff);
     }
 
-    global.hWnd = win32.CreateWindowEx(
+    global.hWnd = win32.CreateWindowExW(
         window_style_ex,
         CLASS_NAME, // Window class
         L("Med"),
@@ -114,7 +114,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         0, 0, // size
         null, // Parent window
         null, // Menu
-        win32.GetModuleHandle(null), // Instance handle
+        win32.GetModuleHandleW(null), // Instance handle
         null // Additional application data
     ) orelse {
         std.log.err("CreateWindow failed with {}", .{win32.GetLastError()});
@@ -126,10 +126,10 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
 
     _ = win32.ShowWindow(global.hWnd, win32.SW_SHOW);
     var msg: MSG = undefined;
-    while (win32.GetMessage(&msg, null, 0, 0) != 0) {
+    while (win32.GetMessageW(&msg, null, 0, 0) != 0) {
         // No need for TranslateMessage since we don't use WM_*CHAR messages
         //_ = win32.TranslateMessage(&msg);
-        _ = win32.DispatchMessage(&msg);
+        _ = win32.DispatchMessageW(&msg);
     }
 }
 
@@ -140,8 +140,8 @@ fn getTextSize(hWnd: win32.HWND, hFont: win32.HFONT) XY(u16) {
     const old_font = win32.SelectObject(hdc, hFont);
     defer _ = win32.SelectObject(hdc, old_font);
 
-    var metrics: win32.TEXTMETRIC = undefined;
-    if (0 == win32.GetTextMetrics(hdc, &metrics))
+    var metrics: win32.TEXTMETRICW = undefined;
+    if (0 == win32.GetTextMetricsW(hdc, &metrics))
         std.debug.panic("GetTextMetrics failed, error={}", .{win32.GetLastError()});
     //std.log.info("{}", .{metrics});
     return .{
@@ -204,10 +204,10 @@ fn resizeWindowToViewport() void {
         null,
         0, 0, // position
         window_size.x, window_size.y,
-        win32.SET_WINDOW_POS_FLAGS.initFlags(.{
+        win32.SET_WINDOW_POS_FLAGS{
             .NOZORDER = 1,
             .NOMOVE = 1,
-        }),
+        },
     ));
 }
 // ================================================================================
@@ -320,7 +320,7 @@ fn WindowProc(
         },
         else => {},
     }
-    return win32.DefWindowProc(hWnd, uMsg, wParam, lParam);
+    return win32.DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
 
 fn paint(hWnd: HWND) void {
@@ -333,7 +333,7 @@ fn paint(hWnd: HWND) void {
     // NOTE: clearing the entire window first causes flickering
     //       see https://catch22.net/tuts/win32/flicker-free-drawing/
     //       TLDR; don't draw over the same pixel twice
-    var erase_bg = false;
+    const erase_bg = false;
     if (erase_bg) {
         const rect = win32.RECT{
             .left = 0, .top = 0,

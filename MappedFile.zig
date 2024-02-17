@@ -53,7 +53,7 @@ pub fn init(
             mapping,
             switch (opt.mode) {
                 .read_only => win32.FILE_MAP_READ,
-                .read_write => win32.FILE_MAP.initFlags(.{ .READ = 1, .WRITE = 1 }),
+                .read_write => win32.FILE_MAP{ .READ = 1, .WRITE = 1 },
             },
             0, 0, 0,
         ) orelse return on_err.report(
