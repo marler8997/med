@@ -4,6 +4,9 @@ const build_options = @import("build_options");
 const CmdlineOpt = @import("CmdlineOpt.zig");
 const engine = @import("engine.zig");
 const color = @import("color.zig");
+const cimport = @cImport({
+    @cInclude("MedResourceNames.h");
+} );
 
 const Input = @import("Input.zig");
 
@@ -16,11 +19,28 @@ const win32 = struct {
     usingnamespace @import("win32").ui.windows_and_messaging;
     usingnamespace @import("win32").graphics.gdi;
 };
+// contains declarations that need to be fixed in zigwin32
+const win32fix = struct {
+    pub extern "user32" fn LoadImageW(
+        hInst: ?win32.HINSTANCE,
+        name: ?[*:0]align(1) const u16,
+        type: win32.GDI_IMAGE_TYPE,
+        cx: i32,
+        cy: i32,
+        flags: win32.IMAGE_FLAGS,
+    ) callconv(std.os.windows.WINAPI) ?win32.HANDLE;
+    pub extern "user32" fn LoadCursorW(
+        hInstance: ?win32.HINSTANCE,
+        lpCursorName: ?[*:0]align(1) const u16,
+    ) callconv(std.os.windows.WINAPI) ?win32.HCURSOR;
+};
+
 const L = win32.L;
 const HINSTANCE = win32.HINSTANCE;
 const CW_USEDEFAULT = win32.CW_USEDEFAULT;
 const MSG = win32.MSG;
 const HWND = win32.HWND;
+const HICON = win32.HICON;
 
 const XY = @import("xy.zig").XY;
 
@@ -65,6 +85,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
             return @import("x11.zig").go(cmdline_opt);
         }
     }
+    const icons = getIcons();
 
     global.brush_bg_void = win32.CreateSolidBrush(toColorRef(color.bg_void)) orelse
         fatal("CreateSolidBrush failed, error={}", .{win32.GetLastError()});
@@ -87,19 +108,21 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
     ) orelse fatal("CreateFont failed, error={}", .{win32.GetLastError()});
 
     const CLASS_NAME = L("Med");
-    const wc = win32.WNDCLASSW{
+    const wc = win32.WNDCLASSEXW{
+        .cbSize = @sizeOf(win32.WNDCLASSEXW),
         .style = .{},
         .lpfnWndProc = WindowProc,
         .cbClsExtra = 0,
         .cbWndExtra = 0,
         .hInstance = win32.GetModuleHandleW(null),
-        .hIcon = null,
+        .hIcon = icons.large,
         .hCursor = null,
         .hbrBackground = null,
         .lpszMenuName = null,
         .lpszClassName = CLASS_NAME,
+        .hIconSm = icons.small,
     };
-    const class_id = win32.RegisterClassW(&wc);
+    const class_id = win32.RegisterClassExW(&wc);
     if (class_id == 0) {
         std.log.err("RegisterClass failed, error={}", .{win32.GetLastError()});
         std.os.exit(0xff);
@@ -466,4 +489,40 @@ fn getClientSize(hWnd: HWND) XY(i32) {
         .x = rect.right - rect.left,
         .y = rect.bottom - rect.top,
     };
+}
+
+const Icons = struct {
+    small: ?HICON,
+    large: ?HICON,
+};
+fn getIcons() Icons {
+    const small_x = win32.GetSystemMetrics(.CXSMICON);
+    const small_y = win32.GetSystemMetrics(.CYSMICON);
+    const large_x = win32.GetSystemMetrics(.CXICON);
+    const large_y = win32.GetSystemMetrics(.CYICON);
+    std.log.info("icons small={}x{} large={}x{}", .{
+        small_x, small_y,
+        large_x, large_y,
+    });
+    const small = win32fix.LoadImageW(
+        win32.GetModuleHandleW(null),
+        @ptrFromInt(cimport.ID_ICON_MED),
+        .ICON,
+        small_x,
+        small_y,
+        win32.LR_SHARED,
+    );
+    if (small == null)
+        std.debug.panic("LoadImage for small icon failed, error={}", .{win32.GetLastError()});
+    const large = win32fix.LoadImageW(
+        win32.GetModuleHandleW(null),
+        @ptrFromInt(cimport.ID_ICON_MED),
+        .ICON,
+        large_x,
+        large_y,
+        win32.LR_SHARED,
+    );
+    if (large == null)
+        std.debug.panic("LoadImage for large icon failed, error={}", .{win32.GetLastError()});
+    return .{ .small = @ptrCast(small), .large = @ptrCast(large) };
 }

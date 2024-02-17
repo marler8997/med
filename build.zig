@@ -30,6 +30,10 @@ pub fn build(b: *std.Build) void {
     if (target.result.os.tag == .windows) {
         exe.subsystem = .Windows;
         exe.root_module.addImport("win32", zigwin32_dep.module("zigwin32"));
+        exe.addIncludePath(.{ .path = "res/inc" });
+        exe.addWin32ResourceFile(.{
+            .file = .{ .path = "res/med.rc" },
+        });
     }
 
     b.installArtifact(exe);
