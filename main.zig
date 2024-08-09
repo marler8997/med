@@ -24,7 +24,6 @@ pub fn cmdlineArgs() [][*:0]u8 {
     if (builtin.os.tag == .windows) {
         const slices = std.process.argsAlloc(windows_args_arena.allocator()) catch |err| switch (err) {
             error.OutOfMemory => oom(error.OutOfMemory),
-            error.InvalidCmdLine => @panic("InvalidCmdLine"),
             error.Overflow => @panic("Overflow while parsing command line"),
         };
         const args = windows_args_arena.allocator().alloc([*:0]u8, slices.len - 1) catch |e| oom(e);

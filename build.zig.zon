@@ -4,12 +4,12 @@
 
     .dependencies = .{
         .zigx = .{
-            .url = "https://github.com/marler8997/zigx/archive/210635466f0dc7ff8b9888c833f215908b17d08c.tar.gz",
-            .hash = "12201a9a38f751dd143aaaf16808875dae26ec3b4f887f8799653b5919a3c074804f",
+            .url = "https://github.com/marler8997/zigx/archive/f09fd6fa5d593c759c0d9d35db4dfb5a150d366a.tar.gz",
+            .hash = "122026f249798ac9b3ab3561b94d8460aaf1fb3487a5cb7c021387db1136cf08936d",
         },
         .zigwin32 = .{
-            .url = "https://github.com/marlersoft/zigwin32/archive/6f9ebf17f42aa7b37f466b195159893ed8eae8fc.tar.gz",
-            .hash = "1220ff2400a1974b2a9dc52cfe5c9c0b2cc87a2e75291ca781dc5b78908afe5af0e8",
+            .url = "https://github.com/marlersoft/zigwin32/archive/407a4c7b869ee3d10db520fdfae8b9faf9b2adb5.tar.gz",
+            .hash = "1220cc9c9028e20f4ec2ece1155ae3479acc1cc509f9ab93acb74e8f5bbf8eefd2a9",
         },
     },
     .paths = .{

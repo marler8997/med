@@ -16,7 +16,7 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "med",
-        .root_source_file = .{ .path = "main.zig" },
+        .root_source_file = b.path("main.zig"),
         .target = target,
         .optimize = optimize,
         .single_threaded = true,
@@ -30,9 +30,11 @@ pub fn build(b: *std.Build) void {
     if (target.result.os.tag == .windows) {
         exe.subsystem = .Windows;
         exe.root_module.addImport("win32", zigwin32_dep.module("zigwin32"));
-        exe.addIncludePath(.{ .path = "res/inc" });
+        const res_inc = b.path("res/inc");
+        exe.addIncludePath(res_inc);
         exe.addWin32ResourceFile(.{
-            .file = .{ .path = "res/med.rc" },
+            .file = b.path("res/med.rc"),
+            .include_paths = &.{ res_inc },
         });
     }
 

@@ -61,7 +61,7 @@ const global = struct {
 pub fn oom(e: error{OutOfMemory}) noreturn {
     std.log.err("{s}", .{@errorName(e)});
     _ = win32.MessageBoxA(null, "Out of memory", "Med Error", win32.MB_OK);
-    std.os.exit(0xff);
+    std.posix.exit(0xff);
 }
 pub fn fatal(comptime fmt: []const u8, args: anytype) noreturn {
     std.log.err(fmt, args);
@@ -71,7 +71,7 @@ pub fn fatal(comptime fmt: []const u8, args: anytype) noreturn {
     const msg = std.fmt.allocPrintZ(arena.allocator(), fmt, args) catch @panic("Out of memory");
     const result = win32.MessageBoxA(null, msg.ptr, null, win32.MB_OK);
     std.log.info("MessageBox result is {}", .{result});
-    std.os.exit(0xff);
+    std.posix.exit(0xff);
 }
 
 fn toColorRef(rgb: color.Rgb) u32 {
@@ -125,7 +125,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
     const class_id = win32.RegisterClassExW(&wc);
     if (class_id == 0) {
         std.log.err("RegisterClass failed, error={}", .{win32.GetLastError()});
-        std.os.exit(0xff);
+        std.posix.exit(0xff);
     }
 
     global.hWnd = win32.CreateWindowExW(
@@ -141,7 +141,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         null // Additional application data
     ) orelse {
         std.log.err("CreateWindow failed with {}", .{win32.GetLastError()});
-        std.os.exit(0xff);
+        std.posix.exit(0xff);
     };
 
     global.font_size = getTextSize(global.hWnd, global.hFont);

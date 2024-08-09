@@ -292,7 +292,7 @@ fn handleAction(action: Input.Action) void {
             if (global_view.open_file_prompt == null) {
                 global_view.open_file_prompt = .{ .path_len = 0 };
                 const prompt = &global_view.open_file_prompt.?;
-                const path = std.os.getcwd(&prompt.path_buf) catch |e| std.debug.panic("todo handle '{s}'", .{@errorName(e)});
+                const path = std.posix.getcwd(&prompt.path_buf) catch |e| std.debug.panic("todo handle '{s}'", .{@errorName(e)});
                 if (path.len + 1 >= prompt.path_buf.len) @panic("handle long cwd");
                 prompt.path_buf[path.len] = std.fs.path.sep;
                 prompt.path_len = path.len + 1;

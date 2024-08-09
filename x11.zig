@@ -25,7 +25,7 @@ var gpa_instance = std.heap.GeneralPurposeAllocator(.{}){};
 const gpa = gpa_instance.allocator();
 
 const global = struct {
-    pub var sock: std.os.socket_t = undefined;
+    pub var sock: std.posix.socket_t = undefined;
     pub var ids: Ids = undefined;
     pub var font_dims: FontDims = undefined;
     pub var window_content_size = XY(u16){ .x = 400, .y = 400 };
@@ -52,7 +52,7 @@ fn x11KeysymToKey(keysym: x.charset.Combined) ?Input.Key {
 
 pub fn oom(e: error{OutOfMemory}) noreturn {
     std.log.err("{s}", .{@errorName(e)});
-    std.os.exit(0xff);
+    std.posix.exit(0xff);
 }
 
 pub fn rgbToXDepth16(rgb: color.Rgb) u16 {
@@ -181,7 +181,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
 
     const conn = try common.connect(arena);
     defer {
-        std.os.shutdown(conn.sock, .both) catch {};
+        std.posix.shutdown(conn.sock, .both) catch {};
         conn.setup.deinit(arena);
     }
     global.sock = conn.sock;
@@ -446,7 +446,7 @@ fn createGc(drawable_id: u32, gc_id: u32, bg: u32, fg: u32) !void {
 // ================================================================================
 pub fn quit() void {
     std.log.info("TODO: should we check if there are unsaved changes before exiting?", .{});
-    std.os.exit(0);
+    std.posix.exit(0);
 }
 pub const errModified = viewModified;
 pub fn viewModified() void {
