@@ -47,7 +47,7 @@ const global = struct {
     pub var brush_bg_status: win32.HBRUSH = undefined;
     pub var brush_bg_menu: win32.HBRUSH = undefined;
     pub var hFont: win32.HFONT = undefined;
-    pub var hWnd: win32.HWND = undefined;
+    pub var hwnd: win32.HWND = undefined;
     pub var font_size: XY(u16) = undefined;
 };
 
@@ -126,7 +126,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         std.posix.exit(0xff);
     }
 
-    global.hWnd = win32.CreateWindowExW(window_style_ex, CLASS_NAME, L("Med"), window_style, CW_USEDEFAULT, // x
+    global.hwnd = win32.CreateWindowExW(window_style_ex, CLASS_NAME, L("Med"), window_style, CW_USEDEFAULT, // x
         CW_USEDEFAULT, // y
         0, // width,
         0, // height
@@ -145,7 +145,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         //int attribute = DWMWA_USE_IMMERSIVE_DARK_MODE;
         const dark_value: c_int = 1;
         const hr = win32.DwmSetWindowAttribute(
-            global.hWnd,
+            global.hwnd,
             win32.DWMWA_USE_IMMERSIVE_DARK_MODE,
             &dark_value,
             @sizeOf(@TypeOf(dark_value)),
@@ -156,10 +156,10 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         );
     }
 
-    global.font_size = getTextSize(global.hWnd, global.hFont);
+    global.font_size = getTextSize(global.hwnd, global.hFont);
     resizeWindowToViewport();
 
-    _ = win32.ShowWindow(global.hWnd, win32.SW_SHOW);
+    _ = win32.ShowWindow(global.hwnd, win32.SW_SHOW);
     var msg: MSG = undefined;
     while (win32.GetMessageW(&msg, null, 0, 0) != 0) {
         // No need for TranslateMessage since we don't use WM_*CHAR messages
@@ -168,9 +168,9 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
     }
 }
 
-fn getTextSize(hWnd: win32.HWND, hFont: win32.HFONT) XY(u16) {
-    const hdc = win32.GetDC(hWnd) orelse std.debug.panic("GetDC failed, error={}", .{win32.GetLastError()});
-    defer std.debug.assert(1 == win32.ReleaseDC(hWnd, hdc));
+fn getTextSize(hwnd: win32.HWND, hFont: win32.HFONT) XY(u16) {
+    const hdc = win32.GetDC(hwnd) orelse std.debug.panic("GetDC failed, error={}", .{win32.GetLastError()});
+    defer std.debug.assert(1 == win32.ReleaseDC(hwnd, hdc));
 
     const old_font = win32.SelectObject(hdc, hFont);
     defer _ = win32.SelectObject(hdc, old_font);
@@ -212,7 +212,7 @@ pub fn viewModified() void {
             return @import("x11.zig").viewModified();
     }
 
-    win32.invalidateHwnd(global.hWnd);
+    win32.invalidateHwnd(global.hwnd);
 }
 
 fn resizeWindowToViewport() void {
@@ -235,7 +235,7 @@ fn resizeWindowToViewport() void {
         };
     };
     std.debug.assert(0 != win32.SetWindowPos(
-        global.hWnd,
+        global.hwnd,
         null,
         0,
         0, // position
@@ -251,18 +251,18 @@ fn resizeWindowToViewport() void {
 // End of the interface for the engine to use
 // ================================================================================
 
-fn lparamToScanCode(lParam: win32.LPARAM) u8 {
-    return @intCast((lParam >> 16) & 0xff);
+fn lparamToScanCode(lparam: win32.LPARAM) u8 {
+    return @intCast((lparam >> 16) & 0xff);
 }
 
-fn unicodeToKey(wParam: win32.WPARAM, lParam: win32.LPARAM) ?Input.Key {
+fn unicodeToKey(wparam: win32.WPARAM, lparam: win32.LPARAM) ?Input.Key {
     var keyboard_state: [256]u8 = undefined;
     if (0 == win32.GetKeyboardState(&keyboard_state))
         std.debug.panic("GetKeyboardState failed, error={}", .{win32.GetLastError()});
     var char_buf: [10]u16 = undefined;
     const unicode_result = win32.ToUnicode(
-        @intCast(wParam),
-        lparamToScanCode(lParam),
+        @intCast(wparam),
+        lparamToScanCode(lparam),
         &keyboard_state,
         @ptrCast(&char_buf),
         char_buf.len,
@@ -296,11 +296,11 @@ fn unicodeToKey(wParam: win32.WPARAM, lParam: win32.LPARAM) ?Input.Key {
     };
 }
 
-fn wmKeyToKey(wParam: win32.WPARAM, lParam: win32.LPARAM) ?Input.Key {
+fn wmKeyToKey(wparam: win32.WPARAM, lparam: win32.LPARAM) ?Input.Key {
     // NOTE: some special keys have to be intercepted before we try
     //       interpreting them as unicode text, because there are multiple
     //       keys that map to the same unicode text.
-    const maybe_special_key: ?Input.Key = switch (wParam) {
+    const maybe_special_key: ?Input.Key = switch (wparam) {
         // Return immediately to avoid conflict with CTL-h (ascii 8 backspace)
         @intFromEnum(win32.VK_BACK) => return .backspace,
         // Return immediately to avoid conflict with CTL-m (ascii 13 carriage return)
@@ -313,7 +313,7 @@ fn wmKeyToKey(wParam: win32.WPARAM, lParam: win32.LPARAM) ?Input.Key {
 
         else => null,
     };
-    const maybe_unicode_key = unicodeToKey(wParam, lParam);
+    const maybe_unicode_key = unicodeToKey(wparam, lparam);
 
     if (maybe_special_key) |special_key| {
         if (maybe_unicode_key) |unicode_key| std.debug.panic(
@@ -325,9 +325,9 @@ fn wmKeyToKey(wParam: win32.WPARAM, lParam: win32.LPARAM) ?Input.Key {
     return maybe_unicode_key;
 }
 
-fn wmKey(wParam: win32.WPARAM, lParam: win32.LPARAM, state: Input.KeyState) void {
-    const key = wmKeyToKey(wParam, lParam) orelse {
-        std.log.info("unhandled vkey {}(0x{0x}) {s}", .{ wParam, @tagName(state) });
+fn wmKey(wparam: win32.WPARAM, lparam: win32.LPARAM, state: Input.KeyState) void {
+    const key = wmKeyToKey(wparam, lparam) orelse {
+        std.log.info("unhandled vkey {}(0x{0x}) {s}", .{ wparam, @tagName(state) });
         return;
     };
     std.log.info("{s} {s}", .{ @tagName(key), @tagName(state) });
@@ -335,18 +335,18 @@ fn wmKey(wParam: win32.WPARAM, lParam: win32.LPARAM, state: Input.KeyState) void
 }
 
 fn WindowProc(
-    hWnd: HWND,
+    hwnd: HWND,
     uMsg: u32,
-    wParam: win32.WPARAM,
-    lParam: win32.LPARAM,
+    wparam: win32.WPARAM,
+    lparam: win32.LPARAM,
 ) callconv(std.os.windows.WINAPI) win32.LRESULT {
     switch (uMsg) {
         win32.WM_KEYDOWN => {
-            wmKey(wParam, lParam, .down);
+            wmKey(wparam, lparam, .down);
             return 0;
         },
         win32.WM_KEYUP => {
-            wmKey(wParam, lParam, .up);
+            wmKey(wparam, lparam, .up);
             return 0;
         },
         win32.WM_DESTROY => {
@@ -354,24 +354,24 @@ fn WindowProc(
             return 0;
         },
         win32.WM_PAINT => {
-            paint(hWnd);
+            paint(hwnd);
             return 0;
         },
         win32.WM_SIZE => {
             // since we "stretch" the image accross the full window, we
             // always invalidate the full client area on each window resize
-            std.debug.assert(0 != win32.InvalidateRect(hWnd, null, 0));
+            std.debug.assert(0 != win32.InvalidateRect(hwnd, null, 0));
         },
         else => {},
     }
-    return win32.DefWindowProcW(hWnd, uMsg, wParam, lParam);
+    return win32.DefWindowProcW(hwnd, uMsg, wparam, lparam);
 }
 
-fn paint(hWnd: HWND) void {
+fn paint(hwnd: HWND) void {
     var ps: win32.PAINTSTRUCT = undefined;
-    const hdc = win32.BeginPaint(hWnd, &ps);
+    const hdc = win32.BeginPaint(hwnd, &ps);
 
-    const client_size = getClientSize(hWnd);
+    const client_size = getClientSize(hwnd);
     const status_y = client_size.y - global.font_size.y;
 
     // NOTE: clearing the entire window first causes flickering
@@ -504,12 +504,12 @@ fn paint(hWnd: HWND) void {
         }
     }
 
-    _ = win32.EndPaint(hWnd, &ps);
+    _ = win32.EndPaint(hwnd, &ps);
 }
 
-fn getClientSize(hWnd: HWND) XY(i32) {
+fn getClientSize(hwnd: HWND) XY(i32) {
     var rect: win32.RECT = undefined;
-    if (0 == win32.GetClientRect(hWnd, &rect))
+    if (0 == win32.GetClientRect(hwnd, &rect))
         fatal("GetClientRect failed, error={}", .{win32.GetLastError()});
     return .{
         .x = rect.right - rect.left,
