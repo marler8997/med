@@ -2,7 +2,7 @@ const OnErr = @This();
 const std = @import("std");
 const RefString = @import("RefString.zig");
 
-on_err: *const fn(context: *OnErr, msg: RefString) void,
+on_err: *const fn (context: *OnErr, msg: RefString) void,
 
 pub fn report(
     self: *OnErr,

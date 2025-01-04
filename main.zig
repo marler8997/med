@@ -19,7 +19,9 @@ pub fn fatal(comptime fmt: []const u8, args: anytype) noreturn {
 }
 
 var windows_args_arena = if (builtin.os.tag == .windows)
-    std.heap.ArenaAllocator.init(std.heap.page_allocator) else struct{}{};
+    std.heap.ArenaAllocator.init(std.heap.page_allocator)
+else
+    struct {}{};
 pub fn cmdlineArgs() [][*:0]u8 {
     if (builtin.os.tag == .windows) {
         const slices = std.process.argsAlloc(windows_args_arena.allocator()) catch |err| switch (err) {
@@ -32,12 +34,11 @@ pub fn cmdlineArgs() [][*:0]u8 {
         }
         return args;
     }
-    return std.os.argv.ptr[1 .. std.os.argv.len];
+    return std.os.argv.ptr[1..std.os.argv.len];
 }
 
 pub fn main() !u8 {
-
-    var cmdline_opt = CmdlineOpt{ };
+    var cmdline_opt = CmdlineOpt{};
 
     const args = blk: {
         const all_args = cmdlineArgs();
@@ -55,7 +56,7 @@ pub fn main() !u8 {
                 fatal("unknown cmdline option '{s}'", .{arg});
             }
         }
-        break :blk all_args[0 .. non_option_len];
+        break :blk all_args[0..non_option_len];
     };
 
     if (args.len != 0)

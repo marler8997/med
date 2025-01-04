@@ -79,9 +79,9 @@ pub const Row = union(enum) {
             .file_backed => |r| view.file.?.map.mem[r.offset..r.limit],
             .array_list_backed => |al| al.items,
         };
-        if (view.viewport_pos.x >= slice.len) return &[0]u8{ };
+        if (view.viewport_pos.x >= slice.len) return &[0]u8{};
         const avail = slice.len - view.viewport_pos.x;
-        return slice[view.viewport_pos.x ..][0 .. @min(avail, view.viewport_size.x)];
+        return slice[view.viewport_pos.x..][0..@min(avail, view.viewport_size.x)];
     }
 };
 
@@ -90,14 +90,14 @@ pub const OpenFilePrompt = struct {
     path_buf: [max_path_len]u8 = undefined,
     path_len: usize,
     pub fn getPathConst(self: *const OpenFilePrompt) []const u8 {
-        return self.path_buf[0 .. self.path_len];
+        return self.path_buf[0..self.path_len];
     }
 };
 
 pub fn getViewportRows(self: View) []Row {
-    if (self.viewport_pos.y >= self.rows.items.len) return &[0]Row{ };
+    if (self.viewport_pos.y >= self.rows.items.len) return &[0]Row{};
     const avail = self.rows.items.len - self.viewport_pos.y;
-    return self.rows.items[self.viewport_pos.y ..][0 .. @min(avail, self.viewport_size.y)];
+    return self.rows.items[self.viewport_pos.y..][0..@min(avail, self.viewport_size.y)];
 }
 pub fn toViewportPos(self: View, pos: XY(u16)) ?XY(u16) {
     if (pos.x < self.viewport_pos.x) return null;
@@ -206,8 +206,14 @@ pub fn delete(self: *View, opt: DeleteOption) error{OutOfMemory}!bool {
                 const al = &row.array_list_backed;
                 try al.ensureTotalCapacity(self.arena(), str.len - 1);
                 al.items.len = str.len - 1;
-                @memcpy(al.items[0 .. cursor_pos.x], str[0 .. cursor_pos.x],);
-                @memcpy(al.items[cursor_pos.x ..], str[cursor_pos.x + 1..],);
+                @memcpy(
+                    al.items[0..cursor_pos.x],
+                    str[0..cursor_pos.x],
+                );
+                @memcpy(
+                    al.items[cursor_pos.x..],
+                    str[cursor_pos.x + 1 ..],
+                );
                 return true;
             },
             .array_list_backed => |*al| {
@@ -229,7 +235,7 @@ pub fn deleteToEndOfLine(self: *View, row_index: usize, line_offset: usize) erro
             const str = self.file.?.map.mem[fb.offset..fb.limit];
             if (line_offset >= str.len) return 0;
             row.* = .{ .array_list_backed = .{} };
-            try row.array_list_backed.appendSlice(self.arena(), str[0 .. line_offset]);
+            try row.array_list_backed.appendSlice(self.arena(), str[0..line_offset]);
             return str.len - line_offset;
         },
         .array_list_backed => |*al| {
@@ -291,9 +297,7 @@ pub fn hasChanges(self: *View, normalized: *bool) bool {
 pub fn writeContents(self: View, writer: anytype) !void {
     for (self.rows.items) |row| {
         switch (row) {
-            .file_backed => |fb| try writer.writeAll(
-                self.file.?.map.mem[fb.offset..fb.limit]
-            ),
+            .file_backed => |fb| try writer.writeAll(self.file.?.map.mem[fb.offset..fb.limit]),
             .array_list_backed => |al| try writer.writeAll(al.items),
         }
         try writer.writeAll("\n");
@@ -307,9 +311,9 @@ fn arrayListUnmanagedCut(
     amount: usize,
 ) void {
     const from = pos + amount;
-    std.log.info("al cut len={} pos={} amount={} from={}", .{al.items.len, pos, amount, from});
+    std.log.info("al cut len={} pos={} amount={} from={}", .{ al.items.len, pos, amount, from });
     std.debug.assert(from <= al.items.len);
-    const dst = al.items[pos..al.items.len - amount];
+    const dst = al.items[pos .. al.items.len - amount];
     std.mem.copyForwards(T, dst, al.items[from..]);
     al.items.len -= amount;
 }

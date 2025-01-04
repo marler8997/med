@@ -14,11 +14,21 @@ const Endian = std.builtin.Endian;
 
 pub const Ids = struct {
     base: u32,
-    pub fn window(self: Ids) u32 { return self.base; }
-    pub fn gc_bg_fg(self: Ids) u32 { return self.base + 1; }
-    pub fn gc_cursor_fg(self: Ids) u32 { return self.base + 2; }
-    pub fn gc_bg_menu_fg(self: Ids) u32 { return self.base + 3; }
-    pub fn gc_bg_menu_err(self: Ids) u32 { return self.base + 4; }
+    pub fn window(self: Ids) u32 {
+        return self.base;
+    }
+    pub fn gc_bg_fg(self: Ids) u32 {
+        return self.base + 1;
+    }
+    pub fn gc_cursor_fg(self: Ids) u32 {
+        return self.base + 2;
+    }
+    pub fn gc_bg_menu_fg(self: Ids) u32 {
+        return self.base + 3;
+    }
+    pub fn gc_bg_menu_err(self: Ids) u32 {
+        return self.base + 4;
+    }
 };
 
 var gpa_instance = std.heap.GeneralPurposeAllocator(.{}){};
@@ -35,9 +45,9 @@ const global = struct {
 fn x11KeysymToKey(keysym: x.charset.Combined) ?Input.Key {
     return switch (keysym.charset()) {
         .latin1 => return switch (keysym.code()) {
-            0 ... 31 => null,
-            ' ' ... '~' => |c| @enumFromInt(@intFromEnum(Input.Key.space) + (c - ' ')),
-            127 ... 255 => null,
+            0...31 => null,
+            ' '...'~' => |c| @enumFromInt(@intFromEnum(Input.Key.space) + (c - ' ')),
+            127...255 => null,
         },
         .keyboard => switch (keysym.code()) {
             @intFromEnum(x.charset.Keyboard.backspace_back_space_back_char) => .backspace,
@@ -123,7 +133,7 @@ fn keymapEntrySyms(syms_per_code: u8, syms: []u32) [4]x.charset.Combined {
         1 => @panic("todo"),
         2 => @panic("todo"),
         3 => @panic("todo"),
-        4 ... 255 => return [4]x.charset.Combined{
+        4...255 => return [4]x.charset.Combined{
             @enumFromInt(syms[0] & 0xffff),
             @enumFromInt(syms[1] & 0xffff),
             @enumFromInt(syms[2] & 0xffff),
@@ -137,7 +147,7 @@ const Keymap = struct {
         var result: Keymap = undefined;
         for (&result.map) |*entry_ref| {
             // TODO: initialize to VoidSymbol instead of 0
-            entry_ref.* = [1]x.charset.Combined{ @enumFromInt(0) } ** 4;
+            entry_ref.* = [1]x.charset.Combined{@enumFromInt(0)} ** 4;
         }
         return result;
     }
@@ -153,7 +163,7 @@ const Keymap = struct {
         if (keymap.syms_per_code == 0)
             @panic("keymap syms_per_code cannot be 0");
 
-        std.log.info("Keymap: syms_per_code={} total_syms={}", .{keymap.syms_per_code, keymap.syms.len});
+        std.log.info("Keymap: syms_per_code={} total_syms={}", .{ keymap.syms_per_code, keymap.syms.len });
         var keycode_index: usize = 0;
         var sym_offset: usize = 0;
         while (keycode_index < keymap.keycode_count) : (keycode_index += 1) {
@@ -188,20 +198,20 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
 
     const fixed = conn.setup.fixed();
     inline for (@typeInfo(@TypeOf(fixed.*)).Struct.fields) |field| {
-        std.log.debug("{s}: {any}", .{field.name, @field(fixed, field.name)});
+        std.log.debug("{s}: {any}", .{ field.name, @field(fixed, field.name) });
     }
     global.ids = Ids{ .base = conn.setup.fixed().resource_id_base };
     std.log.debug("vendor: {s}", .{try conn.setup.getVendorSlice(fixed.vendor_len)});
     const format_list_offset = x.ConnectSetup.getFormatListOffset(fixed.vendor_len);
     const format_list_limit = x.ConnectSetup.getFormatListLimit(format_list_offset, fixed.format_count);
-    std.log.debug("fmt list off={} limit={}", .{format_list_offset, format_list_limit});
+    std.log.debug("fmt list off={} limit={}", .{ format_list_offset, format_list_limit });
     const formats = try conn.setup.getFormatList(format_list_offset, format_list_limit);
     for (formats, 0..) |format, i| {
-        std.log.debug("format[{}] depth={:3} bpp={:3} scanpad={:3}", .{i, format.depth, format.bits_per_pixel, format.scanline_pad});
+        std.log.debug("format[{}] depth={:3} bpp={:3} scanpad={:3}", .{ i, format.depth, format.bits_per_pixel, format.scanline_pad });
     }
     const screen = conn.setup.getFirstScreenPtr(format_list_limit);
     inline for (@typeInfo(@TypeOf(screen.*)).Struct.fields) |field| {
-        std.log.debug("SCREEN 0| {s}: {any}", .{field.name, @field(screen, field.name)});
+        std.log.debug("SCREEN 0| {s}: {any}", .{ field.name, @field(screen, field.name) });
     }
 
     // TODO: maybe need to call conn.setup.verify or something?
@@ -219,13 +229,14 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
             .window_id = global.ids.window(),
             .parent_window_id = screen.root,
             .depth = 0, // we don't care, just inherit from the parent
-            .x = 0, .y = 0,
+            .x = 0,
+            .y = 0,
             .width = global.window_content_size.x,
             .height = global.window_content_size.y,
             .border_width = 0, // TODO: what is this?
             .class = .input_output,
             .visual_id = screen.root_visual,
-            }, .{
+        }, .{
             //            .bg_pixmap = .copy_from_parent,
             .bg_pixel = rgbToX(color.bg_content, screen.root_depth),
             //            //.border_pixmap =
@@ -237,24 +248,15 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
             //            .backing_pixel = 0xbbeeeeff,
             //            .override_redirect = true,
             //            .save_under = true,
-            .event_mask =
-                x.event.key_press
-                | x.event.key_release
-                | x.event.button_press
-                | x.event.button_release
-                | x.event.enter_window
-                | x.event.leave_window
-                | x.event.pointer_motion
-                //                | x.event.pointer_motion_hint WHAT THIS DO?
-                //                | x.event.button1_motion  WHAT THIS DO?
-                //                | x.event.button2_motion  WHAT THIS DO?
-                //                | x.event.button3_motion  WHAT THIS DO?
-                //                | x.event.button4_motion  WHAT THIS DO?
-                //                | x.event.button5_motion  WHAT THIS DO?
-                //                | x.event.button_motion  WHAT THIS DO?
-                | x.event.keymap_state
-                | x.event.exposure
-                ,
+            .event_mask = x.event.key_press | x.event.key_release | x.event.button_press | x.event.button_release | x.event.enter_window | x.event.leave_window | x.event.pointer_motion
+            //                | x.event.pointer_motion_hint WHAT THIS DO?
+            //                | x.event.button1_motion  WHAT THIS DO?
+            //                | x.event.button2_motion  WHAT THIS DO?
+            //                | x.event.button3_motion  WHAT THIS DO?
+            //                | x.event.button4_motion  WHAT THIS DO?
+            //                | x.event.button5_motion  WHAT THIS DO?
+            //                | x.event.button_motion  WHAT THIS DO?
+            | x.event.keymap_state | x.event.exposure,
             //            .dont_propagate = 1,
         });
         try conn.send(msg_buf[0..len]);
@@ -287,8 +289,8 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
 
     // get some font information
     {
-        const text_literal = [_]u16 { 'm' };
-        const text = x.Slice(u16, [*]const u16) { .ptr = &text_literal, .len = text_literal.len };
+        const text_literal = [_]u16{'m'};
+        const text = x.Slice(u16, [*]const u16){ .ptr = &text_literal, .len = text_literal.len };
         var msg: [x.query_text_extents.getLen(text.len)]u8 = undefined;
         x.query_text_extents.serialize(&msg, global.ids.gc_bg_fg(), text);
         try conn.send(&msg);
@@ -467,7 +469,10 @@ fn render() !void {
     {
         var msg: [x.clear_area.len]u8 = undefined;
         x.clear_area.serialize(&msg, false, global.ids.window(), .{
-            .x = 0, .y = 0, .width = global.window_content_size.x, .height = global.window_content_size.y,
+            .x = 0,
+            .y = 0,
+            .width = global.window_content_size.x,
+            .height = global.window_content_size.y,
         });
         try common.send(global.sock, &msg);
     }
@@ -489,7 +494,7 @@ fn render() !void {
                 if (cursor_viewport_pos.x >= row_str.len) break :blk " ";
                 break :blk row_str[cursor_viewport_pos.x..];
             };
-            try renderText(global.ids.gc_cursor_fg(), char_str[0 .. 1], cursor_viewport_pos);
+            try renderText(global.ids.gc_cursor_fg(), char_str[0..1], cursor_viewport_pos);
         }
     }
 
@@ -497,7 +502,8 @@ fn render() !void {
         {
             var msg: [x.clear_area.len]u8 = undefined;
             x.clear_area.serialize(&msg, false, global.ids.window(), .{
-                .x = 0, .y = 0,
+                .x = 0,
+                .y = 0,
                 .width = global.window_content_size.x,
                 .height = 2 * global.font_dims.height,
             });
@@ -510,7 +516,8 @@ fn render() !void {
         {
             var msg: [x.clear_area.len]u8 = undefined;
             x.clear_area.serialize(&msg, false, global.ids.window(), .{
-                .x = 0, .y = 0,
+                .x = 0,
+                .y = 0,
                 .width = global.window_content_size.x,
                 .height = global.font_dims.height,
             });
@@ -522,7 +529,7 @@ fn render() !void {
 }
 
 fn renderText(gc_id: u32, text: []const u8, pos: XY(u16)) !void {
-    const xslice = x.Slice(u8, [*]const u8) {
+    const xslice = x.Slice(u8, [*]const u8){
         .ptr = text.ptr,
         .len = std.math.cast(u8, text.len) orelse @panic("todo: handle render text longer than 255"),
     };
@@ -533,7 +540,7 @@ fn renderText(gc_id: u32, text: []const u8, pos: XY(u16)) !void {
         .x = @intCast(pos.x * global.font_dims.width),
         .y = @as(i16, @intCast(pos.y * global.font_dims.height)) + global.font_dims.font_ascent,
     });
-    try common.send(global.sock, msg_buf[0 .. x.image_text8.getLen(xslice.len)]);
+    try common.send(global.sock, msg_buf[0..x.image_text8.getLen(xslice.len)]);
 }
 
 fn getCodeName(set: x.Charset, code: u8) ?[]const u8 {

@@ -13,7 +13,7 @@ const XY = @import("xy.zig").XY;
 const Gpa = std.heap.GeneralPurposeAllocator(.{});
 
 const global = struct {
-    var gpa_instance = Gpa{ };
+    var gpa_instance = Gpa{};
     pub var gpa = gpa_instance.allocator();
 
     pub var input: Input = .{};
@@ -27,7 +27,7 @@ pub const global_status = struct {
     var buf: [max_len]u8 = undefined;
     pub var len: std.math.IntFittingRange(0, max_len) = 0;
     pub fn slice() []const u8 {
-        return buf[0 .. len];
+        return buf[0..len];
     }
 };
 pub var global_view = View.init();
@@ -62,10 +62,10 @@ pub fn setGlobalStatus(new_status: []const u8, opt: struct {
             global_status.buf[0 .. global_status.max_len - 3],
             new_status[0 .. global_status.max_len - 3],
         );
-        @memcpy(global_status.buf[global_status.max_len - 3..], "...");
+        @memcpy(global_status.buf[global_status.max_len - 3 ..], "...");
         global_status.len = global_status.max_len;
     } else {
-        @memcpy(global_status.buf[0 .. new_status.len], new_status);
+        @memcpy(global_status.buf[0..new_status.len], new_status);
         global_status.len = @intCast(new_status.len);
     }
     platform.statusModified();
@@ -86,7 +86,7 @@ var to_global_err_instance = struct {
         _ = context;
         setGlobalError(msg);
     }
-}{ };
+}{};
 const to_global_err = &to_global_err_instance.base;
 
 fn handleAction(action: Input.Action) void {
@@ -137,7 +137,7 @@ fn handleAction(action: Input.Action) void {
                         global_view.rows.ensureTotalCapacity(global_view.arena(), needed_len) catch |e| oom(e);
                         const old_len = global_view.rows.items.len;
                         global_view.rows.items.len = needed_len;
-                        for (global_view.rows.items[old_len .. needed_len]) |*row| {
+                        for (global_view.rows.items[old_len..needed_len]) |*row| {
                             row.* = .{ .array_list_backed = .{} };
                         }
                     }
@@ -164,11 +164,11 @@ fn handleAction(action: Input.Action) void {
                     al.ensureTotalCapacity(global_view.arena(), needed_len) catch |e| oom(e);
                     const old_len = al.items.len;
                     al.items.len = needed_len;
-                    for (al.items[old_len .. needed_len]) |*c| {
+                    for (al.items[old_len..needed_len]) |*c| {
                         c.* = ' ';
                     }
                 }
-                std.log.info("setting row {} col {} to '{c}'", .{cursor_pos.y, cursor_pos.x, ascii_code});
+                std.log.info("setting row {} col {} to '{c}'", .{ cursor_pos.y, cursor_pos.x, ascii_code });
                 al.items[cursor_pos.x] = ascii_code;
                 cursor_pos.x += 1;
                 platform.viewModified();
@@ -176,9 +176,7 @@ fn handleAction(action: Input.Action) void {
         },
         .enter => {
             if (global_view.open_file_prompt) |*prompt| {
-                const filename = RefString.allocDupe(
-                    prompt.getPathConst()
-                ) catch |e| oom(e);
+                const filename = RefString.allocDupe(prompt.getPathConst()) catch |e| oom(e);
                 defer filename.unref();
                 openFile(filename) catch |e| switch (e) {
                     error.Reported => {},
@@ -209,7 +207,7 @@ fn handleAction(action: Input.Action) void {
 
                 const deleted = global_view.deleteToEndOfLine(cursor_pos.y, cursor_pos.x) catch |e| oom(e);
                 if (copied != deleted)
-                    std.debug.panic("copied {} but deleted {}?", .{copied, deleted});
+                    std.debug.panic("copied {} but deleted {}?", .{ copied, deleted });
 
                 global_view.cursor_pos = .{
                     .x = 0, // TODO: should we try to autodetect tabbing here?
@@ -321,7 +319,7 @@ fn openFile(filename: RefString) error{Reported}!void {
             global_view.rows.append(global_view.arena(), .{ .file_backed = .{
                 .offset = offset,
                 .limit = offset + line.len,
-            }}) catch |e| oom(e);
+            } }) catch |e| oom(e);
         }
     }
 
@@ -345,24 +343,22 @@ fn saveFile() void {
         }
     }
 
-    const file = global_view.file orelse return setGlobalError(
-        RefString.allocDupe(
-            "Not Implemented: saveToDisk for a view without a file"
-        ) catch |e| oom(e)
-    );
+    const file = global_view.file orelse return setGlobalError(RefString.allocDupe(
+        "Not Implemented: saveToDisk for a view without a file",
+    ) catch |e| oom(e));
 
     var path_buf: [std.fs.MAX_PATH_BYTES + 1]u8 = undefined;
     const tmp_filename = std.fmt.bufPrint(
         &path_buf,
         "{s}.med-saving",
         .{file.name.slice},
-    ) catch |err| switch (err) { error.NoSpaceLeft => {
-        setGlobalError(RefString.allocDupe(
-            "saveToDisk error: file path too long"
-        ) catch |e| oom(e));
-        platform.errModified();
-        return;
-    }};
+    ) catch |err| switch (err) {
+        error.NoSpaceLeft => {
+            setGlobalError(RefString.allocDupe("saveToDisk error: file path too long") catch |e| oom(e));
+            platform.errModified();
+            return;
+        },
+    };
 
     if (writeViewToFile(tmp_filename, global_view)) |err| {
         setGlobalError(err);
@@ -370,12 +366,8 @@ fn saveFile() void {
         return;
     }
 
-    std.fs.cwd().rename(
-        tmp_filename, file.name.slice
-    ) catch |err| {
-        setGlobalError(RefString.allocFmt(
-            "rename tmp file failed with {s}", .{@errorName(err)}
-        ) catch |e| oom(e));
+    std.fs.cwd().rename(tmp_filename, file.name.slice) catch |err| {
+        setGlobalError(RefString.allocFmt("rename tmp file failed with {s}", .{@errorName(err)}) catch |e| oom(e));
         platform.errModified();
         return;
     };
@@ -401,16 +393,12 @@ fn saveFile() void {
 
 // returns an optional error
 fn writeViewToFile(filename: []const u8, view: View) ?RefString {
-    var file = std.fs.cwd().createFile(
-        filename, .{}
-    ) catch |err| return RefString.allocFmt(
+    var file = std.fs.cwd().createFile(filename, .{}) catch |err| return RefString.allocFmt(
         "createFile '{s}' failed with {s}",
-        .{filename, @errorName(err)},
+        .{ filename, @errorName(err) },
     ) catch |e| oom(e);
     defer file.close();
-    view.writeContents(file.writer()) catch |err| return RefString.allocFmt(
-        "write to file '{s}' failed with {s}", .{filename, @errorName(err)}
-    ) catch |e| oom(e);
+    view.writeContents(file.writer()) catch |err| return RefString.allocFmt("write to file '{s}' failed with {s}", .{ filename, @errorName(err) }) catch |e| oom(e);
     return null;
 }
 
@@ -425,7 +413,7 @@ fn insertRow(row_index: usize) void {
     if (row_index >= global_view.rows.items.len) {
         while (true) {
             std.log.info("  insertRow: add blank row at index {}", .{global_view.rows.items.len});
-            global_view.rows.append(global_view.arena(), .{ .array_list_backed = .{ } }) catch |e| oom(e);
+            global_view.rows.append(global_view.arena(), .{ .array_list_backed = .{} }) catch |e| oom(e);
             if (global_view.rows.items.len > row_index)
                 return;
         }
@@ -439,7 +427,7 @@ fn insertRow(row_index: usize) void {
         row_index,
         1,
     );
-    global_view.rows.items[row_index] = .{ .array_list_backed = .{ } };
+    global_view.rows.items[row_index] = .{ .array_list_backed = .{} };
 }
 
 fn arrayListUnmanagedShiftRight(
@@ -452,5 +440,5 @@ fn arrayListUnmanagedShiftRight(
     al.ensureUnusedCapacity(allocator, amount) catch |e| oom(e);
     const old_len = al.items.len;
     al.items.len += amount;
-    std.mem.copyBackwards(T, al.items[start + amount..], al.items[start .. old_len]);
+    std.mem.copyBackwards(T, al.items[start + amount ..], al.items[start..old_len]);
 }

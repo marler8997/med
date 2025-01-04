@@ -22,17 +22,17 @@ pub fn init(
     opt: Options,
 ) error{Reported}!MappedFile {
     var file = std.fs.cwd().openFile(filename, .{}) catch |err|
-        return on_err.report("open '{s}' failed, error={s}", .{filename, @errorName(err)});
+        return on_err.report("open '{s}' failed, error={s}", .{ filename, @errorName(err) });
     defer file.close();
     const file_size = file.getEndPos() catch |err|
-        return on_err.report("get file size of '{s}' failed, error={s}", .{filename, @errorName(err)});
+        return on_err.report("get file size of '{s}' failed, error={s}", .{ filename, @errorName(err) });
 
     if (builtin.os.tag == .windows) {
         if (file_size == 0) return MappedFile{
             .mem = &empty_mem,
             .mapping = undefined,
         };
-        
+
         const mapping = win32.CreateFileMappingW(
             file.handle,
             null,
@@ -45,7 +45,7 @@ pub fn init(
             null,
         ) orelse return on_err.report(
             "CreateFileMapping of '{s}' failed, error={}",
-            .{filename, win32.GetLastError()},
+            .{ filename, win32.GetLastError() },
         );
         errdefer std.os.windows.CloseHandle(mapping);
 
@@ -55,16 +55,18 @@ pub fn init(
                 .read_only => win32.FILE_MAP_READ,
                 .read_write => win32.FILE_MAP{ .READ = 1, .WRITE = 1 },
             },
-            0, 0, 0,
+            0,
+            0,
+            0,
         ) orelse return on_err.report(
             "MapViewOfFile of '{s}' failed, error={}",
-            .{filename, win32.GetLastError()},
+            .{ filename, win32.GetLastError() },
         );
         errdefer std.debug.assert(0 != win32.UnmapViewOfFile(ptr));
 
         return .{
             .mapping = mapping,
-            .mem = @as([*]align(std.mem.page_size)u8, @alignCast(@ptrCast(ptr)))[0 .. file_size],
+            .mem = @as([*]align(std.mem.page_size) u8, @alignCast(@ptrCast(ptr)))[0..file_size],
         };
     }
 
@@ -81,12 +83,12 @@ pub fn init(
             0,
         ) catch |err| return on_err.report(
             "mmap '{s}' failed, error={s}",
-            .{filename, @errorName(err)},
+            .{ filename, @errorName(err) },
         ),
         .mapping = {},
-    };    
+    };
 }
-             
+
 pub fn unmap(self: MappedFile) void {
     if (builtin.os.tag == .windows) {
         if (self.mem.len != 0) {

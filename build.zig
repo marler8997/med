@@ -34,7 +34,7 @@ pub fn build(b: *std.Build) void {
         exe.addIncludePath(res_inc);
         exe.addWin32ResourceFile(.{
             .file = b.path("res/med.rc"),
-            .include_paths = &.{ res_inc },
+            .include_paths = &.{res_inc},
         });
     }
 
