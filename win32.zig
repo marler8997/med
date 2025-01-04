@@ -6,19 +6,12 @@ const engine = @import("engine.zig");
 const color = @import("color.zig");
 const cimport = @cImport({
     @cInclude("MedResourceNames.h");
-} );
+});
 
 const Input = @import("Input.zig");
 
-const win32 = struct {
-    usingnamespace @import("win32").zig;
-    usingnamespace @import("win32").foundation;
-    usingnamespace @import("win32").system.library_loader;
-    usingnamespace @import("win32").system.memory;
-    usingnamespace @import("win32").ui.input.keyboard_and_mouse;
-    usingnamespace @import("win32").ui.windows_and_messaging;
-    usingnamespace @import("win32").graphics.gdi;
-};
+const win32 = @import("win32").everything;
+
 // contains declarations that need to be fixed in zigwin32
 const win32fix = struct {
     pub extern "user32" fn LoadImageW(
@@ -96,12 +89,17 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
     global.brush_bg_menu = win32.CreateSolidBrush(toColorRef(color.bg_menu)) orelse
         fatal("CreateSolidBrush failed, error={}", .{win32.GetLastError()});
     global.hFont = win32.CreateFontW(
-        20,0, // height/width
-        0,0, // escapement/orientation
+        20, // height
+        0, // width
+        0, // escapement
+        0, // orientation
         win32.FW_NORMAL, // weight
-        0, 0, 0, // italic, underline, strikeout
+        0,
+        0,
+        0, // italic, underline, strikeout
         0, // charset
-        .DEFAULT_PRECIS, .{ }, // outprecision, clipprecision
+        .DEFAULT_PRECIS,
+        .{}, // outprecision, clipprecision
         .PROOF_QUALITY, // quality
         .MODERN, // pitch and family
         L("SYSTEM_FIXED_FONT"), // face name
@@ -128,13 +126,10 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         std.posix.exit(0xff);
     }
 
-    global.hWnd = win32.CreateWindowExW(
-        window_style_ex,
-        CLASS_NAME, // Window class
-        L("Med"),
-        window_style,
-        CW_USEDEFAULT, CW_USEDEFAULT, // position
-        0, 0, // size
+    global.hWnd = win32.CreateWindowExW(window_style_ex, CLASS_NAME, L("Med"), window_style, CW_USEDEFAULT, // x
+        CW_USEDEFAULT, // y
+        0, // width,
+        0, // height
         null, // Parent window
         null, // Menu
         win32.GetModuleHandleW(null), // Instance handle
@@ -143,6 +138,23 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         std.log.err("CreateWindow failed with {}", .{win32.GetLastError()});
         std.posix.exit(0xff);
     };
+
+    {
+        // TODO: maybe use DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 if applicable
+        // see https://stackoverflow.com/questions/57124243/winforms-dark-title-bar-on-windows-10
+        //int attribute = DWMWA_USE_IMMERSIVE_DARK_MODE;
+        const dark_value: c_int = 1;
+        const hr = win32.DwmSetWindowAttribute(
+            global.hWnd,
+            win32.DWMWA_USE_IMMERSIVE_DARK_MODE,
+            &dark_value,
+            @sizeOf(@TypeOf(dark_value)),
+        );
+        if (hr < 0) std.log.warn(
+            "DwmSetWindowAttribute for dark={} failed, error={}",
+            .{ dark_value, win32.GetLastError() },
+        );
+    }
 
     global.font_size = getTextSize(global.hWnd, global.hFont);
     resizeWindowToViewport();
@@ -200,15 +212,15 @@ pub fn viewModified() void {
             return @import("x11.zig").viewModified();
     }
 
-    if (win32.TRUE != win32.InvalidateRect(global.hWnd, null, 0))
-        fatal("InvalidateRect failed, error={}", .{win32.GetLastError()});
+    win32.invalidateHwnd(global.hWnd);
 }
 
 fn resizeWindowToViewport() void {
     const window_size: XY(i32) = blk: {
-        var rect = win32.RECT {
-            .left = 0, .top = 0,
-            .right  = @intCast(global.font_size.x * engine.global_view.viewport_size.x),
+        var rect = win32.RECT{
+            .left = 0,
+            .top = 0,
+            .right = @intCast(global.font_size.x * engine.global_view.viewport_size.x),
             .bottom = @intCast(global.font_size.y * engine.global_view.viewport_size.y),
         };
         std.debug.assert(0 != win32.AdjustWindowRectEx(
@@ -225,8 +237,10 @@ fn resizeWindowToViewport() void {
     std.debug.assert(0 != win32.SetWindowPos(
         global.hWnd,
         null,
-        0, 0, // position
-        window_size.x, window_size.y,
+        0,
+        0, // position
+        window_size.x,
+        window_size.y,
         win32.SET_WINDOW_POS_FLAGS{
             .NOZORDER = 1,
             .NOMOVE = 1,
@@ -270,13 +284,14 @@ fn unicodeToKey(wParam: win32.WPARAM, lParam: win32.LPARAM) ?Input.Key {
         //       Note that the uppercase ascii value is triggered whether or not
         //       the user typed it as uppercase (with shift pressed).  We always
         //       treat it as the lowercase version (emacs does the same thing).
-        0 ... 31 => |c| @as(Input.Key, @enumFromInt(@intFromEnum(Input.Key.at) + c)).lower(),
+        0...31 => |c| @as(Input.Key, @enumFromInt(@intFromEnum(Input.Key.at) + c)).lower(),
         ' '...'~' => |c| @enumFromInt(@intFromEnum(Input.Key.space) + (c - ' ')),
         else => |c| {
             const a = if (std.math.cast(u8, c)) |a|
                 (if (std.ascii.isPrint(a)) a else '?')
-                else '?';
-            std.debug.panic("TODO: handle character '{c}' {} 0x{x}", .{a, c, c});
+            else
+                '?';
+            std.debug.panic("TODO: handle character '{c}' {} 0x{x}", .{ a, c, c });
         },
     };
 }
@@ -303,7 +318,7 @@ fn wmKeyToKey(wParam: win32.WPARAM, lParam: win32.LPARAM) ?Input.Key {
     if (maybe_special_key) |special_key| {
         if (maybe_unicode_key) |unicode_key| std.debug.panic(
             "both key interp methods have values: special={s} unicode={s}",
-            .{@tagName(special_key), @tagName(unicode_key)},
+            .{ @tagName(special_key), @tagName(unicode_key) },
         );
         return special_key;
     }
@@ -312,10 +327,10 @@ fn wmKeyToKey(wParam: win32.WPARAM, lParam: win32.LPARAM) ?Input.Key {
 
 fn wmKey(wParam: win32.WPARAM, lParam: win32.LPARAM, state: Input.KeyState) void {
     const key = wmKeyToKey(wParam, lParam) orelse {
-        std.log.info("unhandled vkey {}(0x{0x}) {s}", .{wParam, @tagName(state)});
+        std.log.info("unhandled vkey {}(0x{0x}) {s}", .{ wParam, @tagName(state) });
         return;
     };
-    std.log.info("{s} {s}", .{@tagName(key), @tagName(state)});
+    std.log.info("{s} {s}", .{ @tagName(key), @tagName(state) });
     engine.notifyKeyEvent(key, state);
 }
 
@@ -326,8 +341,14 @@ fn WindowProc(
     lParam: win32.LPARAM,
 ) callconv(std.os.windows.WINAPI) win32.LRESULT {
     switch (uMsg) {
-        win32.WM_KEYDOWN => { wmKey(wParam, lParam, .down); return 0; },
-        win32.WM_KEYUP => { wmKey(wParam, lParam, .up); return 0; },
+        win32.WM_KEYDOWN => {
+            wmKey(wParam, lParam, .down);
+            return 0;
+        },
+        win32.WM_KEYUP => {
+            wmKey(wParam, lParam, .up);
+            return 0;
+        },
         win32.WM_DESTROY => {
             win32.PostQuitMessage(0);
             return 0;
@@ -359,8 +380,10 @@ fn paint(hWnd: HWND) void {
     const erase_bg = false;
     if (erase_bg) {
         const rect = win32.RECT{
-            .left = 0, .top = 0,
-            .right = client_size.x, .bottom = status_y,
+            .left = 0,
+            .top = 0,
+            .right = client_size.x,
+            .bottom = status_y,
         };
         _ = win32.FillRect(hdc, &rect, global.brush_bg_void);
     }
@@ -425,8 +448,9 @@ fn paint(hWnd: HWND) void {
     }
 
     if (engine.global_view.open_file_prompt) |*prompt| {
-        const rect = win32.RECT {
-            .left = 0, .top = 0,
+        const rect = win32.RECT{
+            .left = 0,
+            .top = 0,
             .right = client_size.x,
             .bottom = global.font_size.y * 2,
         };
@@ -439,8 +463,9 @@ fn paint(hWnd: HWND) void {
         _ = win32.TextOutA(hdc, 0, 1 * global.font_size.y, @ptrCast(path.ptr), @intCast(path.len));
     }
     if (engine.global_view.err_msg) |err_msg| {
-        const rect = win32.RECT {
-            .left = 0, .top = 0,
+        const rect = win32.RECT{
+            .left = 0,
+            .top = 0,
             .right = client_size.x,
             .bottom = global.font_size.y * 2,
         };
@@ -458,7 +483,8 @@ fn paint(hWnd: HWND) void {
         _ = win32.SetTextColor(hdc, toColorRef(color.fg_status));
         if (0 == win32.TextOutA(
             hdc,
-            0, status_y,
+            0,
+            status_y,
             @ptrCast(status.ptr), // todo: win32 api shouldn't require null terminator
             @intCast(status.len),
         ))

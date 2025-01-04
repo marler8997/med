@@ -8,8 +8,8 @@
             .hash = "122026f249798ac9b3ab3561b94d8460aaf1fb3487a5cb7c021387db1136cf08936d",
         },
         .zigwin32 = .{
-            .url = "https://github.com/marlersoft/zigwin32/archive/407a4c7b869ee3d10db520fdfae8b9faf9b2adb5.tar.gz",
-            .hash = "1220cc9c9028e20f4ec2ece1155ae3479acc1cc509f9ab93acb74e8f5bbf8eefd2a9",
+            .url = "https://github.com/marlersoft/zigwin32/archive/32d085ee67374ad2ec24fc012e6876ca27958fb7.tar.gz",
+            .hash = "1220adcf9ec0447c6a170ed069ed9d52c999b3dcae3557b3647878bf65ee59a2f5d0",
         },
     },
     .paths = .{
