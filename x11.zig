@@ -5,9 +5,9 @@ const x = @import("x");
 const CmdlineOpt = @import("CmdlineOpt.zig");
 const Input = @import("Input.zig");
 const engine = @import("engine.zig");
-const color = @import("color.zig");
 const common = @import("x11common.zig");
 const ContiguousReadBuffer = x.ContiguousReadBuffer;
+const theme = @import("theme.zig");
 const XY = @import("xy.zig").XY;
 
 const Endian = std.builtin.Endian;
@@ -65,14 +65,14 @@ pub fn oom(e: error{OutOfMemory}) noreturn {
     std.posix.exit(0xff);
 }
 
-pub fn rgbToXDepth16(rgb: color.Rgb) u16 {
+pub fn rgbToXDepth16(rgb: theme.Rgb) u16 {
     const r: u16 = @intCast((rgb.r >> 3) & 0x1f);
     const g: u16 = @intCast((rgb.g >> 3) & 0x1f);
     const b: u16 = @intCast((rgb.b >> 3) & 0x1f);
     return (r << 11) | (g << 6) | b;
 }
 
-pub fn rgbToX(rgb: color.Rgb, depth_bits: u8) u32 {
+pub fn rgbToX(rgb: theme.Rgb, depth_bits: u8) u32 {
     return switch (depth_bits) {
         16 => rgbToXDepth16(rgb),
         24 => (@as(u32, rgb.r) << 16) | (@as(u32, rgb.g) << 8) | (@as(u32, rgb.b) << 0),
@@ -238,7 +238,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
             .visual_id = screen.root_visual,
         }, .{
             //            .bg_pixmap = .copy_from_parent,
-            .bg_pixel = rgbToX(color.bg_content, screen.root_depth),
+            .bg_pixel = rgbToX(theme.bg_content, screen.root_depth),
             //            //.border_pixmap =
             //            .border_pixel = 0x01fa8ec9,
             //            .bit_gravity = .north_west,
@@ -265,26 +265,26 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
     try createGc(
         screen.root,
         global.ids.gc_bg_fg(),
-        rgbToX(color.bg_content, screen.root_depth),
-        rgbToX(color.fg, screen.root_depth),
+        rgbToX(theme.bg_content, screen.root_depth),
+        rgbToX(theme.fg, screen.root_depth),
     );
     try createGc(
         screen.root,
         global.ids.gc_cursor_fg(),
-        rgbToX(color.cursor, screen.root_depth),
-        rgbToX(color.fg, screen.root_depth),
+        rgbToX(theme.cursor, screen.root_depth),
+        rgbToX(theme.fg, screen.root_depth),
     );
     try createGc(
         screen.root,
         global.ids.gc_bg_menu_fg(),
-        rgbToX(color.bg_menu, screen.root_depth),
-        rgbToX(color.fg, screen.root_depth),
+        rgbToX(theme.bg_menu, screen.root_depth),
+        rgbToX(theme.fg, screen.root_depth),
     );
     try createGc(
         screen.root,
         global.ids.gc_bg_menu_err(),
-        rgbToX(color.bg_menu, screen.root_depth),
-        rgbToX(color.err, screen.root_depth),
+        rgbToX(theme.bg_menu, screen.root_depth),
+        rgbToX(theme.err, screen.root_depth),
     );
 
     // get some font information

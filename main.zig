@@ -9,6 +9,8 @@ const oom = platform.oom;
 var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 const allocator = arena.allocator();
 
+pub const panic = platform.panic;
+
 pub fn fatal(comptime fmt: []const u8, args: anytype) noreturn {
     if (builtin.os.tag == .windows) {
         @import("win32.zig").fatal(fmt, args);

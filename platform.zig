@@ -4,6 +4,7 @@ const impl = if (builtin.os.tag == .windows)
 else
     @import("x11.zig");
 
+pub const panic = impl.panic;
 pub const oom = impl.oom;
 pub const go = impl.go;
 
