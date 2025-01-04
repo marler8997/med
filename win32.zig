@@ -126,14 +126,19 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         std.posix.exit(0xff);
     }
 
-    global.hwnd = win32.CreateWindowExW(window_style_ex, CLASS_NAME, L("Med"), window_style, CW_USEDEFAULT, // x
+    global.hwnd = win32.CreateWindowExW(
+        window_style_ex,
+        CLASS_NAME,
+        L("Med"),
+        window_style,
+        CW_USEDEFAULT, // x
         CW_USEDEFAULT, // y
         0, // width,
         0, // height
         null, // Parent window
         null, // Menu
         win32.GetModuleHandleW(null), // Instance handle
-        null // Additional application data
+        null, // Additional application data
     ) orelse {
         std.log.err("CreateWindow failed with {}", .{win32.GetLastError()});
         std.posix.exit(0xff);
