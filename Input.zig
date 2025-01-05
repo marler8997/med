@@ -21,6 +21,7 @@ pub const Action = union(enum) {
 
 pub const Key = enum {
     control,
+    alt,
     enter,
     backspace,
     escape,
@@ -43,16 +44,10 @@ pub const Key = enum {
     dash,
     period,
     forward_slash,
-    _0,
-    _1,
-    _2,
-    _3,
-    _4,
-    _5,
-    _6,
-    _7,
-    _8,
-    _9,
+    // zig fmt: off
+    @"0", @"1", @"2", @"3", @"4",
+    @"5", @"6", @"7", @"8", @"9",
+    // zig fmt: on
     colon,
     semicolon,
     open_angle_bracket,
@@ -60,64 +55,20 @@ pub const Key = enum {
     close_angle_bracket,
     question_mark,
     at,
-    A,
-    B,
-    C,
-    D,
-    E,
-    F,
-    G,
-    H,
-    I,
-    J,
-    K,
-    L,
-    M,
-    N,
-    O,
-    P,
-    Q,
-    R,
-    S,
-    T,
-    U,
-    V,
-    W,
-    X,
-    Y,
-    Z,
+    // zig fmt: off
+    A, B, C, D, E, F, G, H, I, J, K, L, M,
+    N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
+    // zig fmt: on
     open_square_bracket,
     backslash,
     close_square_bracket,
     caret,
     underscore,
     backtick,
-    a,
-    b,
-    c,
-    d,
-    e,
-    f,
-    g,
-    h,
-    i,
-    j,
-    k,
-    l,
-    m,
-    n,
-    o,
-    p,
-    q,
-    r,
-    s,
-    t,
-    u,
-    v,
-    w,
-    x,
-    y,
-    z,
+    // zig fmt: off
+    a, b, c, d, e, f, g, h, i, j, k, l, m,
+    n, o, p, q, r, s, t, u, v, w, x, y ,z,
+    // zig fmt: on
     open_curly,
     pipe,
     close_curly,
@@ -129,54 +80,216 @@ pub const Key = enum {
             else => self,
         };
     }
+    pub fn str(key: Key) []const u8 {
+        return switch (key) {
+            .control => "control",
+            .alt => "alt",
+            .enter => "enter",
+            .backspace => "backspace",
+            .escape => "esc",
+            .space => "space",
+            .bang => "!",
+            .double_quote => "\"",
+            .pound => "#",
+            .dollar => "$",
+            .percent => "%",
+            .ampersand => "&",
+            .single_quote => "'",
+            .open_paren => "(",
+            .close_paren => ")",
+            .star => "*",
+            .plus => "+",
+            .comma => ",",
+            .dash => "-",
+            .period => ".",
+            .forward_slash => "/",
+            .@"0" => "0",
+            .@"1" => "1",
+            .@"2" => "2",
+            .@"3" => "3",
+            .@"4" => "4",
+            .@"5" => "5",
+            .@"6" => "6",
+            .@"7" => "7",
+            .@"8" => "8",
+            .@"9" => "9",
+            .colon => ":",
+            .semicolon => ";",
+            .open_angle_bracket => "<",
+            .equal => "=",
+            .close_angle_bracket => ">",
+            .question_mark => "?",
+            .at => "@",
+            .A => "A",
+            .B => "B",
+            .C => "C",
+            .D => "D",
+            .E => "E",
+            .F => "F",
+            .G => "G",
+            .H => "H",
+            .I => "I",
+            .J => "J",
+            .K => "K",
+            .L => "L",
+            .M => "M",
+            .N => "N",
+            .O => "O",
+            .P => "P",
+            .Q => "Q",
+            .R => "R",
+            .S => "S",
+            .T => "T",
+            .U => "U",
+            .V => "V",
+            .W => "W",
+            .X => "X",
+            .Y => "Y",
+            .Z => "Z",
+            .open_square_bracket => "[",
+            .backslash => "\\",
+            .close_square_bracket => "]",
+            .caret => "^",
+            .underscore => "_",
+            .backtick => "`",
+            .a => "a",
+            .b => "b",
+            .c => "c",
+            .d => "d",
+            .e => "e",
+            .f => "f",
+            .g => "g",
+            .h => "h",
+            .i => "i",
+            .j => "j",
+            .k => "k",
+            .l => "l",
+            .m => "m",
+            .n => "n",
+            .o => "o",
+            .p => "p",
+            .q => "q",
+            .r => "r",
+            .s => "s",
+            .t => "t",
+            .u => "u",
+            .v => "v",
+            .w => "w",
+            .x => "x",
+            .y => "y",
+            .z => "z",
+            .open_curly => "{",
+            .pipe => "|",
+            .close_curly => "}",
+            .tilda => "~",
+        };
+    }
 };
 pub const key_count = @typeInfo(Key).Enum.fields.len;
-pub const KeyState = enum { up, down };
-const max_control_sequence = 2;
+pub const KeyPressKind = enum { initial, repeat };
+pub const KeyState = enum { up, down, down_repeat };
 
-key_states: [key_count]KeyState = [1]KeyState{.up} ** key_count,
-control_sequence_buf: [max_control_sequence]Key = undefined,
-control_sequence_len: u2 = 0,
-
-maybe_status: ?Status = null,
-const Status = struct {
-    action: ?Action,
-    keys_buf: [max_control_sequence]Key,
-    keys_len: u2,
+pub const KeyMods = packed struct(u1) {
+    control: bool,
+    pub fn eql(self: KeyMods, other: KeyMods) bool {
+        return @as(u1, @bitCast(self)) == @as(u1, @bitCast(other));
+    }
+    pub fn format(
+        self: KeyMods,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = fmt;
+        _ = options;
+        var sep: []const u8 = "";
+        if (self.control) {
+            try writer.print("{s}control", .{sep});
+            sep = ",";
+        }
+    }
 };
 
-fn getState(self: Input, key: Key) KeyState {
-    return self.key_states[@intFromEnum(key)];
-}
-fn getStateRef(self: *Input, key: Key) *KeyState {
-    return &self.key_states[@intFromEnum(key)];
-}
-
-pub fn setKeyState(self: *Input, key: Key, state: KeyState) ?Action {
-    const key_state_ptr = self.getStateRef(key);
-
-    var state_modified = false;
-    if (key_state_ptr.* == state) {
-        if (state == .up) return null;
-    } else {
-        key_state_ptr.* = state;
-        state_modified = true;
-    }
-    if (state == .down) {
-        // clear status if user newly pressed a new key
-        if (state_modified) {
-            self.maybe_status = null;
+pub const Keybind = struct {
+    pub const max = 3;
+    pub const Node = struct {
+        key: Key,
+        mods: KeyMods,
+        pub fn eql(self: Node, other: Node) bool {
+            return self.key == other.key and self.mods.eql(other.mods);
         }
+        pub fn format(
+            self: Node,
+            comptime fmt: []const u8,
+            options: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            _ = fmt;
+            _ = options;
+            if (self.mods.control) {
+                try writer.writeAll("control-");
+            }
+            try writer.writeAll(self.key.str());
+        }
+    };
+    buf: [max]Node = undefined,
+    len: usize = 0,
 
-        if (self.getStateRef(.control).* == .down) {
-            return self.onKeyDownWithControlDown(key);
-        } else switch (key) {
-            .control => {
-                self.control_sequence_len = 0;
-            },
-            .enter => return Action.enter,
-            .backspace => return Action.backspace,
-            .escape => return null,
+    pub fn last(self: *const Keybind) ?Node {
+        return if (self.len == 0) null else self.buf[self.len - 1];
+    }
+
+    pub fn add(self: *Keybind, node: Node) bool {
+        if (self.len >= max)
+            return false;
+        self.buf[self.len] = node;
+        self.len += 1;
+        return true;
+    }
+
+    pub fn format(
+        self: Keybind,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = fmt;
+        _ = options;
+        var sep: []const u8 = "";
+        for (self.buf[0..self.len]) |node| {
+            try writer.print("{s}{}", .{ sep, node });
+            sep = " ";
+        }
+    }
+};
+
+const KeybindResult = union(enum) {
+    unbound,
+    modifier,
+    prefix,
+    action: Action,
+};
+pub fn evaluateKeybind(
+    keybind: *const Keybind,
+) KeybindResult {
+    switch (keybind.len) {
+        0 => unreachable,
+        1 => if (keybind.buf[0].mods.control) switch (keybind.buf[0].key) {
+            .a => return .{ .action = .cursor_line_start },
+            .b => return .{ .action = .cursor_back },
+            .d => return .{ .action = .delete },
+            .e => return .{ .action = .cursor_line_end },
+            .f => return .{ .action = .cursor_forward },
+            .k => return .{ .action = .kill_line },
+            .n => return .{ .action = .cursor_down },
+            .p => return .{ .action = .cursor_up },
+            .x => return .prefix,
+            else => {},
+        } else return switch (keybind.buf[0].key) {
+            .control, .alt => .modifier,
+            .enter => return .{ .action = .enter },
+            .backspace => return .{ .action = .backspace },
+            .escape => return .unbound,
             .space,
             .bang,
             .double_quote,
@@ -193,16 +306,10 @@ pub fn setKeyState(self: *Input, key: Key, state: KeyState) ?Action {
             .dash,
             .period,
             .forward_slash,
-            ._0,
-            ._1,
-            ._2,
-            ._3,
-            ._4,
-            ._5,
-            ._6,
-            ._7,
-            ._8,
-            ._9,
+            // zig fmt: off
+            .@"0", .@"1", .@"2", .@"3", .@"4",
+            .@"5", .@"6", .@"7", .@"8", .@"9",
+            // zig fmt: on
             .colon,
             .semicolon,
             .open_angle_bracket,
@@ -210,265 +317,41 @@ pub fn setKeyState(self: *Input, key: Key, state: KeyState) ?Action {
             .close_angle_bracket,
             .question_mark,
             .at,
-            .A,
-            .B,
-            .C,
-            .D,
-            .E,
-            .F,
-            .G,
-            .H,
-            .I,
-            .J,
-            .K,
-            .L,
-            .M,
-            .N,
-            .O,
-            .P,
-            .Q,
-            .R,
-            .S,
-            .T,
-            .U,
-            .V,
-            .W,
-            .X,
-            .Y,
-            .Z,
+            // zig fmt: off
+            .A, .B, .C, .D, .E, .F, .G, .H, .I, .J, .K, .L, .M,
+            .N, .O, .P, .Q, .R, .S, .T, .U, .V, .W, .X, .Y, .Z,
+            // zig fmt: on
             .open_square_bracket,
             .backslash,
             .close_square_bracket,
             .caret,
             .underscore,
             .backtick,
-            .a,
-            .b,
-            .c,
-            .d,
-            .e,
-            .f,
-            .g,
-            .h,
-            .i,
-            .j,
-            .k,
-            .l,
-            .m,
-            .n,
-            .o,
-            .p,
-            .q,
-            .r,
-            .s,
-            .t,
-            .u,
-            .v,
-            .w,
-            .x,
-            .y,
-            .z,
+            // zig fmt: off
+            .a, .b, .c, .d, .e, .f, .g, .h, .i, .j, .k, .l, .m,
+            .n, .o, .p, .q, .r, .s, .t, .u, .v, .w, .x, .y, .z,
+            // zig fmt: on
             .open_curly,
             .pipe,
             .close_curly,
             .tilda,
             => |c| {
                 const offset: u8 = @intFromEnum(c) - @intFromEnum(Key.space);
-                return Action{ .add_char = ' ' + offset };
+                return .{ .action = .{ .add_char = ' ' + offset } };
             },
-        }
-    } else {
-        switch (key) {
-            .control => {
-                self.control_sequence_len = 0;
-            },
-            else => {},
-        }
+        },
+        2 => if (keybind.buf[0].key == .x and keybind.buf[0].mods.control) {
+            if (keybind.buf[1].mods.control) switch (keybind.buf[1].key) {
+                .c => return .{ .action = .quit },
+                .f => return .{ .action = .open_file },
+                .s => return .{ .action = .save_file },
+                else => {},
+            };
+        },
+        else => {},
     }
-
-    return null;
-}
-
-fn onKeyDownWithControlDown(self: *Input, key: Key) ?Action {
-    if (key == .control) return null;
-
-    if (self.control_sequence_len < max_control_sequence) {
-        self.control_sequence_buf[self.control_sequence_len] = key;
-        self.control_sequence_len += 1;
-
-        const next: union(enum) {
-            action: ?Action,
-            need_more,
-        } = switch (self.control_sequence_len) {
-            0 => unreachable,
-            1 => switch (self.control_sequence_buf[0]) {
-                .a => .{ .action = .cursor_line_start },
-                .b => .{ .action = .cursor_back },
-                .d => .{ .action = .delete },
-                .e => .{ .action = .cursor_line_end },
-                .f => .{ .action = .cursor_forward },
-                .k => .{ .action = .kill_line },
-                .n => .{ .action = .cursor_down },
-                .p => .{ .action = .cursor_up },
-                .x => .need_more,
-                else => .{ .action = null },
-            },
-            2 => switch (self.control_sequence_buf[0]) {
-                .x => switch (self.control_sequence_buf[1]) {
-                    .c => .{ .action = .quit },
-                    .f => .{ .action = .open_file },
-                    .s => .{ .action = .save_file },
-                    else => .{ .action = null },
-                },
-                else => .{ .action = null },
-            },
-            3 => unreachable,
-        };
-
-        switch (next) {
-            .action => |action| {
-                self.maybe_status = .{
-                    .action = action,
-                    .keys_buf = self.control_sequence_buf,
-                    .keys_len = self.control_sequence_len,
-                };
-                self.control_sequence_len = 0;
-                return action;
-            },
-            .need_more => {},
-        }
-    }
-    return null;
-}
-
-pub fn formatStatus(self: Input, writer: anytype) !void {
-    if (self.control_sequence_len == 0) {
-        if (self.maybe_status) |status| {
-            try formatSequence(writer, status.keys_buf[0..status.keys_len]);
-            try writer.writeAll(" ");
-            if (status.action) |action| {
-                try writer.print("({s})", .{@tagName(action)});
-            } else {
-                try writer.writeAll("is undefined");
-            }
-        } else if (self.getState(.control) == .down) {
-            try writer.writeAll("Ctl-");
-        }
-    } else {
-        try formatSequence(writer, self.control_sequence_buf[0..self.control_sequence_len]);
-    }
-}
-
-fn formatSequence(writer: anytype, keys: []const Key) !void {
-    try writer.writeAll("Ctl-");
-    for (keys, 0..) |key, i| {
-        if (i > 0) {
-            try writer.writeAll("-");
-        }
-        try writer.print("{s}", .{keyStatusString(key)});
-    }
-}
-
-fn keyStatusString(key: Key) []const u8 {
-    return switch (key) {
-        .control => "Ctl",
-        .enter => "return",
-        .backspace => "backspace",
-        .escape => "esc",
-        .space => "space",
-        .bang => "!",
-        .double_quote => "\"",
-        .pound => "#",
-        .dollar => "$",
-        .percent => "%",
-        .ampersand => "&",
-        .single_quote => "'",
-        .open_paren => "(",
-        .close_paren => ")",
-        .star => "*",
-        .plus => "+",
-        .comma => ",",
-        .dash => "-",
-        .period => ".",
-        .forward_slash => "/",
-        ._0 => "0",
-        ._1 => "1",
-        ._2 => "2",
-        ._3 => "3",
-        ._4 => "4",
-        ._5 => "5",
-        ._6 => "6",
-        ._7 => "7",
-        ._8 => "8",
-        ._9 => "9",
-        .colon => ":",
-        .semicolon => ";",
-        .open_angle_bracket => "<",
-        .equal => "=",
-        .close_angle_bracket => ">",
-        .question_mark => "?",
-        .at => "@",
-        .A => "A",
-        .B => "B",
-        .C => "C",
-        .D => "D",
-        .E => "E",
-        .F => "F",
-        .G => "G",
-        .H => "H",
-        .I => "I",
-        .J => "J",
-        .K => "K",
-        .L => "L",
-        .M => "M",
-        .N => "N",
-        .O => "O",
-        .P => "P",
-        .Q => "Q",
-        .R => "R",
-        .S => "S",
-        .T => "T",
-        .U => "U",
-        .V => "V",
-        .W => "W",
-        .X => "X",
-        .Y => "Y",
-        .Z => "Z",
-        .open_square_bracket => "[",
-        .backslash => "\\",
-        .close_square_bracket => "]",
-        .caret => "^",
-        .underscore => "_",
-        .backtick => "`",
-        .a => "a",
-        .b => "b",
-        .c => "c",
-        .d => "d",
-        .e => "e",
-        .f => "f",
-        .g => "g",
-        .h => "h",
-        .i => "i",
-        .j => "j",
-        .k => "k",
-        .l => "l",
-        .m => "m",
-        .n => "n",
-        .o => "o",
-        .p => "p",
-        .q => "q",
-        .r => "r",
-        .s => "s",
-        .t => "t",
-        .u => "u",
-        .v => "v",
-        .w => "w",
-        .x => "x",
-        .y => "y",
-        .z => "z",
-        .open_curly => "{",
-        .pipe => "|",
-        .close_curly => "}",
-        .tilda => "~",
+    return switch (keybind.buf[keybind.len - 1].key) {
+        .control, .alt => .modifier,
+        else => .unbound,
     };
 }

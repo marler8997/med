@@ -23,7 +23,7 @@ const global = struct {
 // The interface for the platform to use
 // ================================================================================
 pub const global_status = struct {
-    pub const max_len = 80;
+    pub const max_len = 400;
     var buf: [max_len]u8 = undefined;
     pub var len: std.math.IntFittingRange(0, max_len) = 0;
     pub fn slice() []const u8 {
@@ -31,23 +31,94 @@ pub const global_status = struct {
     }
 };
 pub var global_view = View.init();
-pub fn notifyKeyEvent(key: Input.Key, state: Input.KeyState) void {
-    if (global.input.setKeyState(key, state)) |action|
-        handleAction(action);
 
-    {
-        var buf: [global_status.max_len]u8 = undefined;
-        var fbs = std.io.fixedBufferStream(&buf);
-        if (global.input.formatStatus(fbs.writer())) {
-            setGlobalStatus(buf[0..fbs.pos], .{});
-        } else |err| switch (err) {
-            error.NoSpaceLeft => setGlobalStatus("status too big!", .{}),
-        }
+pub fn notifyKeyDown(press_kind: Input.KeyPressKind, key: Input.Keybind.Node) void {
+    if (press_kind == .repeat) {
+        // for now, we just ignore all repeat events
+        // if we're in the middle of a keybind
+        if (global_keybind.len > 0) return;
+    }
+
+    if (!global_keybind.add(key)) {
+        reportErrorFmt("key bind too long", .{});
+        global_keybind.len = 0;
+        return;
+    }
+
+    switch (Input.evaluateKeybind(&global_keybind)) {
+        .unbound => {
+            reportInfoFmt("{} (unbound)", .{global_keybind});
+            global_keybind.len = 0;
+        },
+        .modifier => {
+            if (global_keybind.last()) |last| {
+                if (last.eql(key)) {
+                    global_keybind.len -= 1;
+                }
+            }
+        },
+        .prefix => {
+            reportInfoFmt("{} ...", .{global_keybind});
+        },
+        .action => |action| {
+            reportInfoFmt("{} ({s})", .{ global_keybind, @tagName(action) });
+            global_keybind.len = 0;
+            handleAction(action);
+        },
     }
 }
 // ================================================================================
 // End of the interface for the platform to use
 // ================================================================================
+
+var global_keybind: Input.Keybind = .{};
+
+fn MaxBufWriter(comptime max_len: usize) type {
+    return struct {
+        buf: [max_len]u8 = undefined,
+        len: usize = 0,
+
+        const Self = @This();
+        pub const Writer = std.io.GenericWriter(*Self, error{Full}, write);
+        pub fn writer(self: *Self) Writer {
+            return .{ .context = self };
+        }
+        pub fn written(self: *const Self) []const u8 {
+            return self.buf[0..self.len];
+        }
+        fn write(self: *Self, bytes: []const u8) error{Full}!usize {
+            const available = max_len - self.len;
+            const copy_len = @min(available, bytes.len);
+            @memcpy(self.buf[self.len..][0..copy_len], bytes[0..copy_len]);
+            self.len += copy_len;
+            if (copy_len < bytes.len and copy_len == 0) {
+                return error.Full;
+            }
+            return copy_len;
+        }
+    };
+}
+
+fn reportInfoFmt(comptime fmt: []const u8, args: anytype) void {
+    std.log.info(fmt, args);
+    var max_buf_writer: MaxBufWriter(global_status.max_len) = .{};
+    max_buf_writer.writer().print(fmt, args) catch {
+        max_buf_writer.buf[global_status.max_len - 1] = '.';
+        max_buf_writer.buf[global_status.max_len - 2] = '.';
+        max_buf_writer.buf[global_status.max_len - 3] = '.';
+    };
+    setGlobalStatus(max_buf_writer.written(), .{});
+}
+fn reportErrorFmt(comptime fmt: []const u8, args: anytype) void {
+    std.log.err(fmt, args);
+    var max_buf_writer: MaxBufWriter(global_status.max_len) = .{};
+    max_buf_writer.writer().print("error: " ++ fmt, args) catch {
+        max_buf_writer.buf[global_status.max_len - 1] = '.';
+        max_buf_writer.buf[global_status.max_len - 2] = '.';
+        max_buf_writer.buf[global_status.max_len - 3] = '.';
+    };
+    setGlobalStatus(max_buf_writer.written(), .{});
+}
 
 pub fn setGlobalStatus(new_status: []const u8, opt: struct {
     check_if_equal: bool = true,

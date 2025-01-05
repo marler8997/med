@@ -377,7 +377,9 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
                     //std.log.info("key_press: keycode={} mod={s}", .{msg.keycode, @tagName(mod)});
                     const keysym = keymap.getKeysym(msg.keycode, mod);
                     if (x11KeysymToKey(keysym)) |key| {
-                        engine.notifyKeyEvent(key, .down);
+                        _ = key;
+                        @panic("todo");
+                        //engine.notifyKeyEvent(key, .down);
                     }
                 },
                 .key_release => |msg| {
@@ -385,7 +387,9 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
                     //std.log.info("key_release: keycode={} mod={s}", .{msg.keycode, @tagName(mod)});
                     const keysym = keymap.getKeysym(msg.keycode, mod);
                     if (x11KeysymToKey(keysym)) |key| {
-                        engine.notifyKeyEvent(key, .up);
+                        _ = key;
+                        @panic("todo");
+                        //engine.notifyKeyEvent(key, .up);
                     }
                 },
                 .button_press => |msg| {
