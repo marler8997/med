@@ -72,7 +72,68 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
             return @import("x11.zig").go(cmdline_opt);
         }
     }
-    const icons = getIcons();
+
+    const maybe_monitor = win32.MonitorFromPoint(
+        .{ .x = 0, .y = 0 },
+        win32.MONITOR_DEFAULTTOPRIMARY,
+    );
+    if (maybe_monitor == null) {
+        std.log.warn("MonitorFromPoint failed with {}", .{win32.GetLastError().fmt()});
+        //break :blk .{ .x = win32.CW_USEDEFAULT, .y = win32.CW_USEDEFAULT };
+    }
+
+    const default_dpi: XY(u32) = .{ .x = 96, .y = 96 };
+    const monitor_dpi: XY(u32) = blk: {
+        const monitor = maybe_monitor orelse break :blk default_dpi;
+        var dpi: XY(u32) = undefined;
+        const hr = win32.GetDpiForMonitor(
+            monitor,
+            win32.MDT_EFFECTIVE_DPI,
+            &dpi.x,
+            &dpi.y,
+        );
+        if (hr < 0) {
+            std.log.warn("GetDpiForMonitor failed, hresult=0x{x}", .{@as(u32, @bitCast(hr))});
+            break :blk default_dpi;
+        }
+        break :blk dpi;
+    };
+
+    const initial_window_size: XY(i32) = blk: {
+        const monitor = maybe_monitor orelse break :blk .{
+            .x = win32.CW_USEDEFAULT,
+            .y = win32.CW_USEDEFAULT,
+        };
+
+        var info: win32.MONITORINFO = undefined;
+        info.cbSize = @sizeOf(win32.MONITORINFO);
+        if (0 == win32.GetMonitorInfoW(monitor, &info)) {
+            std.log.warn("GetMonitorInfo failed with {}", .{win32.GetLastError().fmt()});
+            break :blk .{
+                .x = win32.CW_USEDEFAULT,
+                .y = win32.CW_USEDEFAULT,
+            };
+        }
+
+        const work_size: XY(i32) = .{
+            .x = info.rcWork.right - info.rcWork.left,
+            .y = info.rcWork.bottom - info.rcWork.top,
+        };
+        std.log.info(
+            "Monitor DPI {}x{} Work {}x{}",
+            .{ monitor_dpi.x, monitor_dpi.y, work_size.x, work_size.y },
+        );
+        const default_initial_size: XY(i32) = .{
+            .x = win32.scaleDpi(i32, 800, monitor_dpi.x),
+            .y = win32.scaleDpi(i32, 1200, monitor_dpi.y),
+        };
+        break :blk .{
+            .x = @min(default_initial_size.x, work_size.x),
+            .y = @min(default_initial_size.y, work_size.y),
+        };
+    };
+
+    const icons = getIcons(monitor_dpi);
 
     const CLASS_NAME = L("Med");
     const wc = win32.WNDCLASSEXW{
@@ -94,46 +155,6 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         std.log.err("RegisterClass failed, error={}", .{win32.GetLastError()});
         std.posix.exit(0xff);
     }
-
-    const initial_window_size: XY(i32) = blk: {
-        const monitor = win32.MonitorFromPoint(
-            .{ .x = 0, .y = 0 },
-            win32.MONITOR_DEFAULTTOPRIMARY,
-        ) orelse {
-            std.log.warn("MonitorFromPoint failed with {}", .{win32.GetLastError().fmt()});
-            break :blk .{ .x = win32.CW_USEDEFAULT, .y = win32.CW_USEDEFAULT };
-        };
-
-        var info: win32.MONITORINFO = undefined;
-        info.cbSize = @sizeOf(win32.MONITORINFO);
-        if (0 == win32.GetMonitorInfoW(monitor, &info)) {
-            std.log.warn("GetMonitorInfo failed with {}", .{win32.GetLastError().fmt()});
-            break :blk .{ .x = win32.CW_USEDEFAULT, .y = win32.CW_USEDEFAULT };
-        }
-
-        var dpi: XY(u32) = undefined;
-        {
-            const hr = win32.GetDpiForMonitor(monitor, win32.MDT_EFFECTIVE_DPI, &dpi.x, &dpi.y);
-            if (hr < 0) {
-                std.log.warn("GetDpiForMonitor failed, hresult=0x{x}", .{@as(u32, @bitCast(hr))});
-                break :blk .{ .x = win32.CW_USEDEFAULT, .y = win32.CW_USEDEFAULT };
-            }
-        }
-
-        const work_size: XY(i32) = .{
-            .x = info.rcWork.right - info.rcWork.left,
-            .y = info.rcWork.bottom - info.rcWork.top,
-        };
-        std.log.info("Monitor DPI {}x{} Work {}x{}", .{ dpi.x, dpi.y, work_size.x, work_size.y });
-        const default_initial_size: XY(i32) = .{
-            .x = win32.scaleDpi(i32, 800, dpi.x),
-            .y = win32.scaleDpi(i32, 1200, dpi.y),
-        };
-        break :blk .{
-            .x = @min(default_initial_size.x, work_size.x),
-            .y = @min(default_initial_size.y, work_size.y),
-        };
-    };
 
     global.hwnd = win32.CreateWindowExW(
         window_style_ex,
@@ -504,14 +525,15 @@ const Icons = struct {
     small: ?HICON,
     large: ?HICON,
 };
-fn getIcons() Icons {
-    const small_x = win32.GetSystemMetrics(.CXSMICON);
-    const small_y = win32.GetSystemMetrics(.CYSMICON);
-    const large_x = win32.GetSystemMetrics(.CXICON);
-    const large_y = win32.GetSystemMetrics(.CYICON);
-    std.log.info("icons small={}x{} large={}x{}", .{
+fn getIcons(dpi: XY(u32)) Icons {
+    const small_x = win32.GetSystemMetricsForDpi(@intFromEnum(win32.SM_CXSMICON), dpi.x);
+    const small_y = win32.GetSystemMetricsForDpi(@intFromEnum(win32.SM_CYSMICON), dpi.y);
+    const large_x = win32.GetSystemMetricsForDpi(@intFromEnum(win32.SM_CXICON), dpi.x);
+    const large_y = win32.GetSystemMetricsForDpi(@intFromEnum(win32.SM_CYICON), dpi.y);
+    std.log.info("icons small={}x{} large={}x{} at dpi {}x{}", .{
         small_x, small_y,
         large_x, large_y,
+        dpi.x,   dpi.y,
     });
     const small = win32fix.LoadImageW(
         win32.GetModuleHandleW(null),
