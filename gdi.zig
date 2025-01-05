@@ -139,6 +139,12 @@ pub fn paint(
     // NOTE: clearing the entire window first causes flickering
     //       see https://catch22.net/tuts/win32/flicker-free-drawing/
     //       TLDR; don't draw over the same pixel twice
+
+    const viewport_size: XY(usize) = .{
+        .x = @intCast(@divTrunc(client_size.x, font_size.x)),
+        .y = @intCast(@divTrunc(status_y, font_size.y)),
+    };
+
     switch (engine.global_current_pane) {
         .welcome => {
             const rect = win32.RECT{
@@ -160,11 +166,25 @@ pub fn paint(
                 win32.GetLastError(),
             );
         },
-        .file => |*view| {
-            const viewport_size: XY(usize) = .{
-                .x = @intCast(@divTrunc(client_size.x, font_size.x)),
-                .y = @intCast(@divTrunc(status_y, font_size.y)),
+        .terminal => |terminal| {
+            _ = terminal;
+            const rect = win32.RECT{
+                .left = 0,
+                .top = 0,
+                .right = client_size.x,
+                .bottom = status_y,
             };
+            _ = win32.FillRect(hdc, &rect, cache.getBrush(.void_bg));
+
+            _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_void));
+            _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
+            const msg = win32.L("TODO: render terminal");
+            if (0 == win32.TextOutW(hdc, 0, 0, msg.ptr, @intCast(msg.len))) medwin32.fatalWin32(
+                "TextOut",
+                win32.GetLastError(),
+            );
+        },
+        .file => |view| {
             const viewport_rows = view.getViewportRows(viewport_size.y);
 
             _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_content));

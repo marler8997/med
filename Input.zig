@@ -17,6 +17,7 @@ pub const Action = union(enum) {
     kill_line,
     open_file,
     save_file,
+    @"open-terminal",
     kill_pane,
     quit,
 };
@@ -279,6 +280,7 @@ pub fn evaluateKeybind(
     switch (keybind.len) {
         0 => unreachable,
         1 => if (keybind.buf[0].mods.control) switch (keybind.buf[0].key) {
+            .comma => return .prefix,
             .a => return .{ .action = .cursor_line_start },
             .b => return .{ .action = .cursor_back },
             .d => return .{ .action = .delete },
@@ -345,8 +347,12 @@ pub fn evaluateKeybind(
                 return .{ .action = .{ .add_char = ' ' + offset } };
             },
         },
-        2 => if (keybind.buf[0].key == .x and keybind.buf[0].mods.control) {
-            if (keybind.buf[1].mods.control) switch (keybind.buf[1].key) {
+        2 => if (keybind.buf[0].mods.control) switch (keybind.buf[0].key) {
+            .comma => if (keybind.buf[1].mods.control) switch (keybind.buf[1].key) {
+                .comma => return .{ .action = .@"open-terminal" },
+                else => {},
+            } else {},
+            .x => if (keybind.buf[1].mods.control) switch (keybind.buf[1].key) {
                 .c => return .{ .action = .quit },
                 .f => return .{ .action = .open_file },
                 .s => return .{ .action = .save_file },
@@ -354,7 +360,8 @@ pub fn evaluateKeybind(
             } else switch (keybind.buf[1].key) {
                 .k => return .{ .action = .kill_pane },
                 else => {},
-            }
+            },
+            else => {},
         },
         else => {},
     }

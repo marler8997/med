@@ -7,6 +7,7 @@ const OnErr = @import("OnErr.zig");
 const platform = @import("platform.zig");
 const RefString = @import("RefString.zig");
 const oom = platform.oom;
+const Terminal = @import("Terminal.zig");
 const View = @import("View.zig");
 const XY = @import("xy.zig").XY;
 
@@ -33,17 +34,10 @@ pub const global_status = struct {
 
 pub const Pane = union(enum) {
     welcome,
-    file: View,
-    pub fn deinit(self: *Pane) void {
-        switch (self.*) {
-            .welcome => {},
-            .file => |*view| {
-                view.deinit();
-            },
-        }
-        self.* = undefined;
-    }
+    terminal: *Terminal,
+    file: *View,
 };
+
 pub var global_current_pane: Pane = .welcome;
 pub var global_err_msg: ?RefString = null;
 pub var global_open_file_prompt: ?OpenFilePrompt = null;
@@ -96,6 +90,11 @@ pub fn notifyKeyDown(press_kind: Input.KeyPressKind, key: Input.Keybind.Node) vo
 // ================================================================================
 // End of the interface for the platform to use
 // ================================================================================
+
+var global_terminal: Terminal = .{
+    .arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator),
+};
+var global_file: View = View.init();
 
 const Dialog = struct {
     pub const Kind = enum {
@@ -175,6 +174,7 @@ const Dialog = struct {
             }, // ignore
             .open_file => {}, // ignore
             .save_file => {}, // ignore
+            .@"open-terminal" => {}, // ignore
             .kill_pane => {}, // ignore
             .quit => platform.quit(),
         }
@@ -300,6 +300,7 @@ fn handleAction(action: Input.Action) void {
             .kill_line => {}, // ignore
             .open_file => {}, // ignore
             .save_file => {}, // ignore
+            .@"open-terminal" => {}, // ignore
             .kill_pane => {}, // ignore
             .quit => platform.quit(),
         }
@@ -326,7 +327,8 @@ fn handleAction(action: Input.Action) void {
                     platform.beep();
                     reportErrorFmt("no file open", .{});
                 },
-                .file => |*view| {
+                .terminal => {},
+                .file => |view| {
                     if (view.cursor_pos) |*cursor_pos| {
                         if (cursor_pos.y >= view.rows.items.len) {
                             const needed_len = cursor_pos.y + 1;
@@ -392,7 +394,10 @@ fn handleAction(action: Input.Action) void {
                     platform.beep();
                     reportErrorFmt("no file open", .{});
                 },
-                .file => |*view| {
+                .terminal => |terminal| {
+                    terminal.submitInput();
+                },
+                .file => |view| {
                     if (view.cursor_pos) |*cursor_pos| {
                         const new_row_index = cursor_pos.y + 1;
                         insertRow(view, new_row_index);
@@ -434,7 +439,10 @@ fn handleAction(action: Input.Action) void {
                 //       we can just reuse it's functions for this
             } else switch (global_current_pane) {
                 .welcome => {},
-                .file => |*view| {
+                .terminal => |terminal| if (terminal.@"cursor-back"()) {
+                    platform.terminalModified();
+                },
+                .file => |view| {
                     if (view.cursorBack()) {
                         platform.viewModified();
                     }
@@ -447,7 +455,10 @@ fn handleAction(action: Input.Action) void {
                 //       we can just reuse it's functions for this
             } else switch (global_current_pane) {
                 .welcome => {},
-                .file => |*view| {
+                .terminal => |terminal| if (terminal.@"cursor-forward"()) {
+                    platform.terminalModified();
+                },
+                .file => |view| {
                     if (view.cursorForward()) {
                         platform.viewModified();
                     }
@@ -460,7 +471,8 @@ fn handleAction(action: Input.Action) void {
                 //       we can just reuse it's functions for this
             } else switch (global_current_pane) {
                 .welcome => {},
-                .file => |*view| {
+                .terminal => {},
+                .file => |view| {
                     if (view.cursorUp()) {
                         platform.viewModified();
                     }
@@ -473,7 +485,8 @@ fn handleAction(action: Input.Action) void {
                 //       we can just reuse it's functions for this
             } else switch (global_current_pane) {
                 .welcome => {},
-                .file => |*view| {
+                .terminal => {},
+                .file => |view| {
                     if (view.cursorDown()) {
                         platform.viewModified();
                     }
@@ -486,7 +499,10 @@ fn handleAction(action: Input.Action) void {
                 //       we can just reuse it's functions for this
             } else switch (global_current_pane) {
                 .welcome => {},
-                .file => |*view| {
+                .terminal => |terminal| if (terminal.@"cursor-line-start"()) {
+                    platform.terminalModified();
+                },
+                .file => |view| {
                     if (view.cursorLineStart()) {
                         platform.viewModified();
                     }
@@ -499,7 +515,10 @@ fn handleAction(action: Input.Action) void {
                 //       we can just reuse it's functions for this
             } else switch (global_current_pane) {
                 .welcome => {},
-                .file => |*view| {
+                .terminal => |terminal| if (terminal.@"cursor-line-end"()) {
+                    platform.terminalModified();
+                },
+                .file => |view| {
                     if (view.cursorLineEnd()) {
                         platform.viewModified();
                     }
@@ -511,7 +530,10 @@ fn handleAction(action: Input.Action) void {
                 reportErrorFmt("TODO: tab completion for open file prompt", .{});
             } else switch (global_current_pane) {
                 .welcome => {},
-                .file => |*view| {
+                .terminal => |terminal| if (terminal.tab()) {
+                    platform.terminalModified();
+                },
+                .file => |view| {
                     _ = view;
                     reportErrorFmt("TODO: implement tab", .{});
                 },
@@ -520,7 +542,10 @@ fn handleAction(action: Input.Action) void {
         .delete => {
             switch (global_current_pane) {
                 .welcome => {},
-                .file => |*view| {
+                .terminal => |terminal| if (terminal.delete()) {
+                    platform.terminalModified();
+                },
+                .file => |view| {
                     if (view.delete(.not_from_backspace) catch |e| oom(e)) {
                         platform.viewModified();
                     }
@@ -532,7 +557,10 @@ fn handleAction(action: Input.Action) void {
                 std.log.info("todo: implement backspace for file prompt", .{});
             } else switch (global_current_pane) {
                 .welcome => {},
-                .file => |*view| {
+                .terminal => |terminal| if (terminal.backspace()) {
+                    platform.terminalModified();
+                },
+                .file => |view| {
                     if (view.cursorBack()) {
                         _ = view.delete(.from_backspace) catch |e| oom(e);
                         platform.viewModified();
@@ -545,7 +573,10 @@ fn handleAction(action: Input.Action) void {
                 @panic("todo: kill-line while opening file");
             } else switch (global_current_pane) {
                 .welcome => {},
-                .file => |*view| {
+                .terminal => |terminal| if (terminal.backspace()) {
+                    platform.terminalModified();
+                },
+                .file => |view| {
                     if (view.killLine()) {
                         platform.viewModified();
                     }
@@ -564,6 +595,14 @@ fn handleAction(action: Input.Action) void {
             }
         },
         .save_file => saveFile(),
+        .@"open-terminal" => {
+            if (global_open_file_prompt) |_| {
+                std.log.err("cannot open terminal while opening file", .{});
+            } else if (global_current_pane != .terminal) {
+                global_current_pane = Pane{ .terminal = &global_terminal };
+                platform.paneModified();
+            }
+        },
         .kill_pane => @"kill-pane"(.{ .prompt_unsaved_changes = true }),
         .quit => platform.quit(),
     }
@@ -575,26 +614,27 @@ fn @"open-file"(filename: RefString) error{Reported}!void {
     const mapped_file = try MappedFile.init(filename.slice, to_global_err, .{});
     errdefer mapped_file.unmap();
 
-    // initialize the view
-    global_current_pane.deinit();
-    global_current_pane = .welcome;
+    if (global_current_pane == .file) {
+        global_current_pane = .welcome;
+    }
 
-    var view = View.init();
+    global_file.deinit();
+    global_file = View.init();
 
     {
         var line_it = std.mem.split(u8, mapped_file.mem, "\n");
         while (line_it.next()) |line| {
             const offset = @intFromPtr(line.ptr) - @intFromPtr(mapped_file.mem.ptr);
-            view.rows.append(view.arena(), .{ .file_backed = .{
+            global_file.rows.append(global_file.arena(), .{ .file_backed = .{
                 .offset = offset,
                 .limit = offset + line.len,
             } }) catch |e| oom(e);
         }
     }
 
-    if (view.file) |file| file.close();
-    view.file = View.OpenFile.initAndNameAddRef(mapped_file, filename);
-    global_current_pane = Pane{ .file = view };
+    if (global_file.file) |file| file.close();
+    global_file.file = View.OpenFile.initAndNameAddRef(mapped_file, filename);
+    global_current_pane = Pane{ .file = &global_file };
 }
 
 fn saveFile() void {
@@ -610,7 +650,12 @@ fn saveFile() void {
             std.log.err("no file to save", .{});
             return;
         },
-        .file => |*view| view,
+        .terminal => {
+            platform.beep();
+            reportErrorFmt("save-file for terminal not implemented", .{});
+            return;
+        },
+        .file => |view| view,
     };
 
     {
@@ -697,7 +742,11 @@ fn @"kill-pane"(opt: struct { prompt_unsaved_changes: bool }) void {
             std.log.err("cannot kill the welcome pane", .{});
             return;
         },
-        .file => |*view| {
+        .terminal => {
+            reportErrorFmt("TODO: implement kill-pane for terminal", .{});
+            return;
+        },
+        .file => |view| {
             if (opt.prompt_unsaved_changes) {
                 var normalized = false;
                 const has_changes = view.hasChanges(&normalized);
@@ -714,9 +763,9 @@ fn @"kill-pane"(opt: struct { prompt_unsaved_changes: bool }) void {
                     return;
                 }
             }
-            global_current_pane.deinit();
+            view.deinit();
             global_current_pane = .welcome;
-            platform.viewModified();
+            platform.paneModified();
         },
     }
 }

@@ -260,6 +260,8 @@ pub fn panic(
 pub const statusModified = viewModified;
 pub const errModified = viewModified;
 pub const dialogModified = viewModified;
+pub const terminalModified = viewModified;
+pub const paneModified = viewModified;
 pub fn viewModified() void {
     if (build_options.enable_x11_backend) {
         if (global.x11)
@@ -414,6 +416,7 @@ const WinKey = struct {
             // @intFromEnum(win32.VK_MEDIA_PREV_TRACK) => Input.Key.media_track_previous,
             // @intFromEnum(win32.VK_MEDIA_STOP) => Input.Key.media_stop,
             // @intFromEnum(win32.VK_MEDIA_PLAY_PAUSE) => Input.Key.media_play_pause,
+            @intFromEnum(win32.VK_OEM_COMMA) => Input.Key.comma,
             else => null,
         };
     }

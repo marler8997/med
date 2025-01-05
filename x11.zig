@@ -482,7 +482,11 @@ fn render() !void {
 
     switch (engine.global_current_pane) {
         .welcome => {},
-        .file => |*view| {
+        .terminal => |terminal| {
+            _ = terminal;
+            @panic("todo");
+        },
+        .file => |view| {
             const viewport_size: XY(usize) = .{
                 .x = @intCast(@divTrunc(global.window_content_size.x, global.font_dims.width)),
                 .y = @intCast(@divTrunc(global.window_content_size.y, global.font_dims.height)),
