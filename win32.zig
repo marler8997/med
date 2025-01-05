@@ -31,7 +31,6 @@ const win32fix = struct {
 
 const L = win32.L;
 const HINSTANCE = win32.HINSTANCE;
-const CW_USEDEFAULT = win32.CW_USEDEFAULT;
 const MSG = win32.MSG;
 const HWND = win32.HWND;
 const HICON = win32.HICON;
@@ -96,15 +95,55 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         std.posix.exit(0xff);
     }
 
+    const initial_window_size: XY(i32) = blk: {
+        const monitor = win32.MonitorFromPoint(
+            .{ .x = 0, .y = 0 },
+            win32.MONITOR_DEFAULTTOPRIMARY,
+        ) orelse {
+            std.log.warn("MonitorFromPoint failed with {}", .{win32.GetLastError().fmt()});
+            break :blk .{ .x = win32.CW_USEDEFAULT, .y = win32.CW_USEDEFAULT };
+        };
+
+        var info: win32.MONITORINFO = undefined;
+        info.cbSize = @sizeOf(win32.MONITORINFO);
+        if (0 == win32.GetMonitorInfoW(monitor, &info)) {
+            std.log.warn("GetMonitorInfo failed with {}", .{win32.GetLastError().fmt()});
+            break :blk .{ .x = win32.CW_USEDEFAULT, .y = win32.CW_USEDEFAULT };
+        }
+
+        var dpi: XY(u32) = undefined;
+        {
+            const hr = win32.GetDpiForMonitor(monitor, win32.MDT_EFFECTIVE_DPI, &dpi.x, &dpi.y);
+            if (hr < 0) {
+                std.log.warn("GetDpiForMonitor failed, hresult=0x{x}", .{@as(u32, @bitCast(hr))});
+                break :blk .{ .x = win32.CW_USEDEFAULT, .y = win32.CW_USEDEFAULT };
+            }
+        }
+
+        const work_size: XY(i32) = .{
+            .x = info.rcWork.right - info.rcWork.left,
+            .y = info.rcWork.bottom - info.rcWork.top,
+        };
+        std.log.info("Monitor DPI {}x{} Work {}x{}", .{ dpi.x, dpi.y, work_size.x, work_size.y });
+        const default_initial_size: XY(i32) = .{
+            .x = win32.scaleDpi(i32, 800, dpi.x),
+            .y = win32.scaleDpi(i32, 1200, dpi.y),
+        };
+        break :blk .{
+            .x = @min(default_initial_size.x, work_size.x),
+            .y = @min(default_initial_size.y, work_size.y),
+        };
+    };
+
     global.hwnd = win32.CreateWindowExW(
         window_style_ex,
         CLASS_NAME,
         L("Med"),
         window_style,
-        CW_USEDEFAULT, // x
-        CW_USEDEFAULT, // y
-        0, // width,
-        0, // height
+        win32.CW_USEDEFAULT, // x
+        win32.CW_USEDEFAULT, // y
+        initial_window_size.x,
+        initial_window_size.y,
         null, // Parent window
         null, // Menu
         win32.GetModuleHandleW(null), // Instance handle
@@ -143,9 +182,9 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
     }
 }
 
-// ================================================================================
+// ============================================================
 // The interface for the engine to use
-// ================================================================================
+// ============================================================
 pub fn quit() void {
     if (build_options.enable_x11_backend) {
         if (global.x11)
@@ -220,9 +259,9 @@ fn resizeWindowToViewport(font_size: XY(i32)) void {
         },
     ));
 }
-// ================================================================================
+// ============================================================
 // End of the interface for the engine to use
-// ================================================================================
+// ============================================================
 
 const WinKey = struct {
     vk: u16,
