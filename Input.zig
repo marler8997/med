@@ -5,6 +5,7 @@ const std = @import("std");
 pub const Action = union(enum) {
     add_char: u8,
     enter,
+    @"keyboard-quit",
     cursor_back,
     cursor_forward,
     cursor_up,
@@ -286,6 +287,7 @@ pub fn evaluateKeybind(
             .d => return .{ .action = .delete },
             .e => return .{ .action = .cursor_line_end },
             .f => return .{ .action = .cursor_forward },
+            .g => return .{ .action = .@"keyboard-quit" },
             .k => return .{ .action = .kill_line },
             .n => return .{ .action = .cursor_down },
             .p => return .{ .action = .cursor_up },

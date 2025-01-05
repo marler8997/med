@@ -154,6 +154,15 @@ const Dialog = struct {
                     },
                 }
             },
+            .@"keyboard-quit" => {
+                switch (self.kind) {
+                    .unsaved_changes_confirm_kill => {
+                        self.* = undefined;
+                        global_dialog = null;
+                        platform.dialogModified();
+                    },
+                }
+            },
             .cursor_back,
             .cursor_forward,
             .cursor_up,
@@ -282,7 +291,7 @@ fn handleAction(action: Input.Action) void {
     if (global_err_msg) |err_msg| {
         switch (action) {
             .add_char => {}, // ignore
-            .enter => {
+            .enter, .@"keyboard-quit" => {
                 err_msg.unref();
                 global_err_msg = null;
                 platform.errModified();
@@ -431,6 +440,16 @@ fn handleAction(action: Input.Action) void {
                     }
                     std.log.warn("TODO: handle enter with no cursor?", .{});
                 },
+            }
+        },
+        .@"keyboard-quit" => {
+            if (global_open_file_prompt) |_| {
+                global_open_file_prompt = null;
+                platform.viewModified();
+            } else switch (global_current_pane) {
+                .welcome => {},
+                .terminal => {},
+                .file => {},
             }
         },
         .cursor_back => {
