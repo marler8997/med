@@ -83,7 +83,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         .cbWndExtra = 0,
         .hInstance = win32.GetModuleHandleW(null),
         .hIcon = icons.large,
-        .hCursor = null,
+        .hCursor = win32.LoadCursorW(null, win32.IDC_ARROW),
         .hbrBackground = null,
         .lpszMenuName = null,
         .lpszClassName = CLASS_NAME,
