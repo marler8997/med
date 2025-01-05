@@ -330,7 +330,7 @@ const WinKey = struct {
         };
         return switch (self.vk) {
             @intFromEnum(win32.VK_BACK) => Input.Key.backspace,
-            // @intFromEnum(win32.VK_TAB) => input.key.tab,
+            @intFromEnum(win32.VK_TAB) => Input.Key.tab,
             @intFromEnum(win32.VK_RETURN) => Input.Key.enter,
             @intFromEnum(win32.VK_CONTROL) => Input.Key.control,
             @intFromEnum(win32.VK_MENU) => Input.Key.alt,

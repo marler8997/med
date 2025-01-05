@@ -11,6 +11,7 @@ pub const Action = union(enum) {
     cursor_down,
     cursor_line_start,
     cursor_line_end,
+    tab,
     delete,
     backspace,
     kill_line,
@@ -25,6 +26,7 @@ pub const Key = enum {
     alt,
     enter,
     backspace,
+    tab,
     escape,
     // The rest of the keys are in ASCII order and the engine
     // guarantees this to make it easier to translate to/from
@@ -87,6 +89,7 @@ pub const Key = enum {
             .alt => "alt",
             .enter => "enter",
             .backspace => "backspace",
+            .tab => "tab",
             .escape => "esc",
             .space => "space",
             .bang => "!",
@@ -290,6 +293,7 @@ pub fn evaluateKeybind(
             .control, .alt => .modifier,
             .enter => return .{ .action = .enter },
             .backspace => return .{ .action = .backspace },
+            .tab => return .{ .action = .tab },
             .escape => return .unbound,
             .space,
             .bang,

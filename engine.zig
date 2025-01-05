@@ -163,6 +163,7 @@ const Dialog = struct {
             .cursor_line_end,
             => {}, // ignore
             .delete => {}, // ignore
+            .tab => {},
             .backspace => {
                 if (self.text_len > self.kind.textPrefix().len) {
                     self.text_len -= 1;
@@ -293,6 +294,7 @@ fn handleAction(action: Input.Action) void {
             .cursor_line_start,
             .cursor_line_end,
             => {}, // ignore
+            .tab => {}, // ignore
             .delete => {}, // ignore
             .backspace => {}, // ignore
             .kill_line => {}, // ignore
@@ -501,6 +503,17 @@ fn handleAction(action: Input.Action) void {
                     if (view.cursorLineEnd()) {
                         platform.viewModified();
                     }
+                },
+            }
+        },
+        .tab => {
+            if (global_open_file_prompt) |_| {
+                reportErrorFmt("TODO: tab completion for open file prompt", .{});
+            } else switch (global_current_pane) {
+                .welcome => {},
+                .file => |*view| {
+                    _ = view;
+                    reportErrorFmt("TODO: implement tab", .{});
                 },
             }
         },
