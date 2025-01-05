@@ -65,26 +65,38 @@ pub fn fatal(comptime fmt: []const u8, args: anytype) noreturn {
     std.posix.exit(0xff);
 }
 
-pub fn go(cmdline_opt: CmdlineOpt) !void {
-    if (build_options.enable_x11_backend) {
-        global.x11 = cmdline_opt.x11;
-        if (cmdline_opt.x11) {
-            return @import("x11.zig").go(cmdline_opt);
-        }
-    }
+const WindowPlacement = struct {
+    dpi: XY(u32),
+    size: XY(i32),
+    pos: XY(i32),
+    pub const default: WindowPlacement = .{
+        .dpi = .{
+            .x = 96,
+            .y = 96,
+        },
+        .pos = .{
+            .x = win32.CW_USEDEFAULT,
+            .y = win32.CW_USEDEFAULT,
+        },
+        .size = .{
+            .x = win32.CW_USEDEFAULT,
+            .y = win32.CW_USEDEFAULT,
+        },
+    };
+};
 
-    const maybe_monitor = win32.MonitorFromPoint(
+fn calcWindowPlacement() WindowPlacement {
+    var result = WindowPlacement.default;
+
+    const monitor = win32.MonitorFromPoint(
         .{ .x = 0, .y = 0 },
         win32.MONITOR_DEFAULTTOPRIMARY,
-    );
-    if (maybe_monitor == null) {
+    ) orelse {
         std.log.warn("MonitorFromPoint failed with {}", .{win32.GetLastError().fmt()});
-        //break :blk .{ .x = win32.CW_USEDEFAULT, .y = win32.CW_USEDEFAULT };
-    }
+        return result;
+    };
 
-    const default_dpi: XY(u32) = .{ .x = 96, .y = 96 };
-    const monitor_dpi: XY(u32) = blk: {
-        const monitor = maybe_monitor orelse break :blk default_dpi;
+    result.dpi = blk: {
         var dpi: XY(u32) = undefined;
         const hr = win32.GetDpiForMonitor(
             monitor,
@@ -94,46 +106,57 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         );
         if (hr < 0) {
             std.log.warn("GetDpiForMonitor failed, hresult=0x{x}", .{@as(u32, @bitCast(hr))});
-            break :blk default_dpi;
+            return result;
         }
         break :blk dpi;
     };
+    std.log.info("primary monitor dpi {}x{}", .{ result.dpi.x, result.dpi.y });
 
-    const initial_window_size: XY(i32) = blk: {
-        const monitor = maybe_monitor orelse break :blk .{
-            .x = win32.CW_USEDEFAULT,
-            .y = win32.CW_USEDEFAULT,
-        };
-
+    const work_rect: win32.RECT = blk: {
         var info: win32.MONITORINFO = undefined;
         info.cbSize = @sizeOf(win32.MONITORINFO);
         if (0 == win32.GetMonitorInfoW(monitor, &info)) {
             std.log.warn("GetMonitorInfo failed with {}", .{win32.GetLastError().fmt()});
-            break :blk .{
-                .x = win32.CW_USEDEFAULT,
-                .y = win32.CW_USEDEFAULT,
-            };
+            return result;
         }
-
-        const work_size: XY(i32) = .{
-            .x = info.rcWork.right - info.rcWork.left,
-            .y = info.rcWork.bottom - info.rcWork.top,
-        };
-        std.log.info(
-            "Monitor DPI {}x{} Work {}x{}",
-            .{ monitor_dpi.x, monitor_dpi.y, work_size.x, work_size.y },
-        );
-        const default_initial_size: XY(i32) = .{
-            .x = win32.scaleDpi(i32, 800, monitor_dpi.x),
-            .y = win32.scaleDpi(i32, 1200, monitor_dpi.y),
-        };
-        break :blk .{
-            .x = @min(default_initial_size.x, work_size.x),
-            .y = @min(default_initial_size.y, work_size.y),
-        };
+        break :blk info.rcWork;
     };
 
-    const icons = getIcons(monitor_dpi);
+    const work_size: XY(i32) = .{
+        .x = work_rect.right - work_rect.left,
+        .y = work_rect.bottom - work_rect.top,
+    };
+    std.log.info(
+        "primary monitor work topleft={},{} size={}x{}",
+        .{ work_rect.left, work_rect.top, work_size.x, work_size.y },
+    );
+
+    const wanted_size: XY(i32) = .{
+        .x = win32.scaleDpi(i32, 800, result.dpi.x),
+        .y = win32.scaleDpi(i32, 1200, result.dpi.y),
+    };
+    result.size = .{
+        .x = @min(wanted_size.x, work_size.x),
+        .y = @min(wanted_size.y, work_size.y),
+    };
+    result.pos = .{
+        // TODO: maybe we should shift this window away from the center?
+        .x = work_rect.left + @divTrunc(work_size.x - result.size.x, 2),
+        .y = work_rect.top + @divTrunc(work_size.y - result.size.y, 2),
+    };
+    return result;
+}
+
+pub fn go(cmdline_opt: CmdlineOpt) !void {
+    if (build_options.enable_x11_backend) {
+        global.x11 = cmdline_opt.x11;
+        if (cmdline_opt.x11) {
+            return @import("x11.zig").go(cmdline_opt);
+        }
+    }
+
+    const initial_placement = calcWindowPlacement();
+    const icons = getIcons(initial_placement.dpi);
 
     const CLASS_NAME = L("Med");
     const wc = win32.WNDCLASSEXW{
@@ -161,10 +184,10 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         CLASS_NAME,
         L("Med"),
         window_style,
-        win32.CW_USEDEFAULT, // x
-        win32.CW_USEDEFAULT, // y
-        initial_window_size.x,
-        initial_window_size.y,
+        initial_placement.pos.x,
+        initial_placement.pos.y,
+        initial_placement.size.x,
+        initial_placement.size.y,
         null, // Parent window
         null, // Menu
         win32.GetModuleHandleW(null), // Instance handle
@@ -190,9 +213,6 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
             .{ dark_value, win32.GetLastError() },
         );
     }
-
-    const font_size = gdi.getFontSize(i32, win32.dpiFromHwnd(global.hwnd), &global.gdi_cache);
-    resizeWindowToViewport(font_size);
 
     _ = win32.ShowWindow(global.hwnd, win32.SW_SHOW);
     var msg: MSG = undefined;
@@ -239,6 +259,7 @@ pub fn panic(
 //       no matter what is modified
 pub const statusModified = viewModified;
 pub const errModified = viewModified;
+pub const dialogModified = viewModified;
 pub fn viewModified() void {
     if (build_options.enable_x11_backend) {
         if (global.x11)
@@ -247,38 +268,8 @@ pub fn viewModified() void {
 
     win32.invalidateHwnd(global.hwnd);
 }
-
-fn resizeWindowToViewport(font_size: XY(i32)) void {
-    const window_size: XY(i32) = blk: {
-        var rect = win32.RECT{
-            .left = 0,
-            .top = 0,
-            .right = @intCast(font_size.x * engine.global_view.viewport_size.x),
-            .bottom = @intCast(font_size.y * engine.global_view.viewport_size.y),
-        };
-        std.debug.assert(0 != win32.AdjustWindowRectEx(
-            &rect,
-            window_style,
-            0,
-            window_style_ex,
-        ));
-        break :blk .{
-            .x = rect.right - rect.left,
-            .y = rect.bottom - rect.top,
-        };
-    };
-    std.debug.assert(0 != win32.SetWindowPos(
-        global.hwnd,
-        null,
-        0,
-        0, // position
-        window_size.x,
-        window_size.y,
-        win32.SET_WINDOW_POS_FLAGS{
-            .NOZORDER = 1,
-            .NOMOVE = 1,
-        },
-    ));
+pub fn beep() void {
+    _ = win32.MessageBeep(@as(u32, @bitCast(win32.MB_OK)));
 }
 // ============================================================
 // End of the interface for the engine to use
@@ -507,14 +498,17 @@ fn WindowProc(
         },
         win32.WM_PAINT => {
             const dpi = win32.dpiFromHwnd(hwnd);
-            const font_size = gdi.getFontSize(i32, dpi, &global.gdi_cache);
-            gdi.paint(hwnd, dpi, font_size, &global.gdi_cache);
+            const client_size = gdi.getClientSize(hwnd);
+            var ps: win32.PAINTSTRUCT = undefined;
+            const hdc = win32.BeginPaint(hwnd, &ps) orelse fatalWin32("BeginPaint", win32.GetLastError());
+            gdi.paint(hdc, dpi, client_size, &global.gdi_cache);
+            _ = win32.EndPaint(hwnd, &ps);
             return 0;
         },
         win32.WM_SIZE => {
             // since we "stretch" the image accross the full window, we
             // always invalidate the full client area on each window resize
-            std.debug.assert(0 != win32.InvalidateRect(hwnd, null, 0));
+            win32.invalidateHwnd(hwnd);
         },
         else => {},
     }

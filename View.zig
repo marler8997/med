@@ -10,10 +10,6 @@ file: ?OpenFile = null,
 rows: std.ArrayListUnmanaged(Row) = .{},
 cursor_pos: ?XY(u16) = .{ .x = 0, .y = 0 },
 viewport_pos: XY(u32) = .{ .x = 0, .y = 0 },
-// TODO: viewport_size should not be apart of View
-viewport_size: XY(u16) = .{ .x = 80, .y = 40 },
-open_file_prompt: ?OpenFilePrompt = null,
-err_msg: ?RefString = null,
 
 pub fn init() View {
     return .{
@@ -21,9 +17,6 @@ pub fn init() View {
     };
 }
 pub fn deinit(self: *View) void {
-    if (self.err_msg) |err_msg| {
-        err_msg.unref();
-    }
     if (self.file) |file| {
         file.close();
     }
@@ -74,36 +67,27 @@ pub const Row = union(enum) {
             .array_list_backed => |al| al.items,
         };
     }
-    pub fn getViewport(self: Row, view: View) []u8 {
+    pub fn getViewport(self: Row, view: View, viewport_width: usize) []u8 {
         const slice = switch (self) {
             .file_backed => |r| view.file.?.map.mem[r.offset..r.limit],
             .array_list_backed => |al| al.items,
         };
         if (view.viewport_pos.x >= slice.len) return &[0]u8{};
         const avail = slice.len - view.viewport_pos.x;
-        return slice[view.viewport_pos.x..][0..@min(avail, view.viewport_size.x)];
+        return slice[view.viewport_pos.x..][0..@min(avail, viewport_width)];
     }
 };
 
-pub const OpenFilePrompt = struct {
-    const max_path_len = 2048;
-    path_buf: [max_path_len]u8 = undefined,
-    path_len: usize,
-    pub fn getPathConst(self: *const OpenFilePrompt) []const u8 {
-        return self.path_buf[0..self.path_len];
-    }
-};
-
-pub fn getViewportRows(self: View) []Row {
+pub fn getViewportRows(self: View, viewport_height: usize) []Row {
     if (self.viewport_pos.y >= self.rows.items.len) return &[0]Row{};
     const avail = self.rows.items.len - self.viewport_pos.y;
-    return self.rows.items[self.viewport_pos.y..][0..@min(avail, self.viewport_size.y)];
+    return self.rows.items[self.viewport_pos.y..][0..@min(avail, viewport_height)];
 }
-pub fn toViewportPos(self: View, pos: XY(u16)) ?XY(u16) {
+pub fn toViewportPos(self: View, viewport_size: XY(usize), pos: XY(u16)) ?XY(u16) {
     if (pos.x < self.viewport_pos.x) return null;
     if (pos.y < self.viewport_pos.y) return null;
-    if (pos.x >= self.viewport_pos.x + self.viewport_size.x) return null;
-    if (pos.y >= self.viewport_pos.y + self.viewport_size.y) return null;
+    if (pos.x >= self.viewport_pos.x + viewport_size.x) return null;
+    if (pos.y >= self.viewport_pos.y + viewport_size.y) return null;
     return .{
         .x = @intCast(pos.x - self.viewport_pos.x),
         .y = @intCast(pos.y - self.viewport_pos.y),

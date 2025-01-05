@@ -377,9 +377,9 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
                     //std.log.info("key_press: keycode={} mod={s}", .{msg.keycode, @tagName(mod)});
                     const keysym = keymap.getKeysym(msg.keycode, mod);
                     if (x11KeysymToKey(keysym)) |key| {
-                        _ = key;
-                        @panic("todo");
-                        //engine.notifyKeyEvent(key, .down);
+                        std.log.err("TODO: pass key down event for key {} to engine", .{key});
+                        //@panic("todo");
+                        //engine.notifyKeyDown(press_kind, .{ .key = key, .mods = mods });
                     }
                 },
                 .key_release => |msg| {
@@ -388,8 +388,7 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
                     const keysym = keymap.getKeysym(msg.keycode, mod);
                     if (x11KeysymToKey(keysym)) |key| {
                         _ = key;
-                        @panic("todo");
-                        //engine.notifyKeyEvent(key, .up);
+                        //@panic("todo");
                     }
                 },
                 .button_press => |msg| {
@@ -481,28 +480,37 @@ fn render() !void {
         try common.send(global.sock, &msg);
     }
 
-    const viewport_rows = engine.global_view.getViewportRows();
-
-    for (viewport_rows, 0..) |row, row_index| {
-        const text = row.getViewport(engine.global_view);
-        try renderText(global.ids.gc_bg_fg(), text, .{ .x = 0, .y = @intCast(row_index) });
-    }
-
-    // draw cursor
-    if (engine.global_view.cursor_pos) |cursor_global_pos| {
-        if (engine.global_view.toViewportPos(cursor_global_pos)) |cursor_viewport_pos| {
-            const char_str: []const u8 = blk: {
-                if (cursor_viewport_pos.y >= viewport_rows.len) break :blk " ";
-                const row = &viewport_rows[cursor_viewport_pos.y];
-                const row_str = row.getViewport(engine.global_view);
-                if (cursor_viewport_pos.x >= row_str.len) break :blk " ";
-                break :blk row_str[cursor_viewport_pos.x..];
+    switch (engine.global_current_pane) {
+        .welcome => {},
+        .file => |*view| {
+            const viewport_size: XY(usize) = .{
+                .x = @intCast(@divTrunc(global.window_content_size.x, global.font_dims.width)),
+                .y = @intCast(@divTrunc(global.window_content_size.y, global.font_dims.height)),
             };
-            try renderText(global.ids.gc_cursor_fg(), char_str[0..1], cursor_viewport_pos);
-        }
+            const viewport_rows = view.getViewportRows(viewport_size.y);
+
+            for (viewport_rows, 0..) |row, row_index| {
+                const text = row.getViewport(view.*, viewport_size.x);
+                try renderText(global.ids.gc_bg_fg(), text, .{ .x = 0, .y = @intCast(row_index) });
+            }
+
+            // draw cursor
+            if (view.cursor_pos) |cursor_global_pos| {
+                if (view.toViewportPos(viewport_size, cursor_global_pos)) |cursor_viewport_pos| {
+                    const char_str: []const u8 = blk: {
+                        if (cursor_viewport_pos.y >= viewport_rows.len) break :blk " ";
+                        const row = &viewport_rows[cursor_viewport_pos.y];
+                        const row_str = row.getViewport(view.*, viewport_size.x);
+                        if (cursor_viewport_pos.x >= row_str.len) break :blk " ";
+                        break :blk row_str[cursor_viewport_pos.x..];
+                    };
+                    try renderText(global.ids.gc_cursor_fg(), char_str[0..1], cursor_viewport_pos);
+                }
+            }
+        },
     }
 
-    if (engine.global_view.open_file_prompt) |*prompt| {
+    if (engine.global_open_file_prompt) |*prompt| {
         {
             var msg: [x.clear_area.len]u8 = undefined;
             x.clear_area.serialize(&msg, false, global.ids.window(), .{
@@ -516,7 +524,7 @@ fn render() !void {
         try renderText(global.ids.gc_bg_menu_fg(), "Open File:", .{ .x = 0, .y = 0 });
         try renderText(global.ids.gc_bg_menu_fg(), prompt.getPathConst(), .{ .x = 0, .y = 1 });
     }
-    if (engine.global_view.err_msg) |err_msg| {
+    if (engine.global_err_msg) |err_msg| {
         {
             var msg: [x.clear_area.len]u8 = undefined;
             x.clear_area.serialize(&msg, false, global.ids.window(), .{

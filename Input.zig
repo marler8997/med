@@ -16,6 +16,7 @@ pub const Action = union(enum) {
     kill_line,
     open_file,
     save_file,
+    kill_pane,
     quit,
 };
 
@@ -346,7 +347,10 @@ pub fn evaluateKeybind(
                 .f => return .{ .action = .open_file },
                 .s => return .{ .action = .save_file },
                 else => {},
-            };
+            } else switch (keybind.buf[1].key) {
+                .k => return .{ .action = .kill_pane },
+                else => {},
+            }
         },
         else => {},
     }

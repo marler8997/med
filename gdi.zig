@@ -101,8 +101,6 @@ fn colorrefFromRgb(rgb: theme.Rgb) u32 {
 }
 
 pub fn getFontSize(comptime T: type, dpi: u32, cache: *ObjectCache) XY(T) {
-    //const hdc = win32.GetDC(hwnd) orelse std.debug.panic("GetDC failed, error={}", .{win32.GetLastError()});
-    //defer std.debug.assert(1 == win32.ReleaseDC(hwnd, hdc));
     const hdc = win32.CreateCompatibleDC(null);
     defer if (0 == win32.DeleteDC(hdc)) medwin32.fatalWin32("DeleteDC", win32.GetLastError());
 
@@ -112,8 +110,10 @@ pub fn getFontSize(comptime T: type, dpi: u32, cache: *ObjectCache) XY(T) {
     defer _ = win32.SelectObject(hdc, old_font);
 
     var metrics: win32.TEXTMETRICW = undefined;
-    if (0 == win32.GetTextMetricsW(hdc, &metrics))
-        std.debug.panic("GetTextMetrics failed, error={}", .{win32.GetLastError()});
+    if (0 == win32.GetTextMetricsW(hdc, &metrics)) medwin32.fatalWin32(
+        "GetTextMetrics",
+        win32.GetLastError(),
+    );
     //std.log.info("{}", .{metrics});
     return .{
         // WARNING: windows doesn't guarantee AFAIK that rendering a multi-character
@@ -126,92 +126,109 @@ pub fn getFontSize(comptime T: type, dpi: u32, cache: *ObjectCache) XY(T) {
 }
 
 pub fn paint(
-    hwnd: win32.HWND,
+    hdc: win32.HDC,
     dpi: u32,
-    font_size: XY(i32),
+    client_size: XY(i32),
     cache: *ObjectCache,
 ) void {
-    var ps: win32.PAINTSTRUCT = undefined;
-    const hdc = win32.BeginPaint(hwnd, &ps);
-
-    const client_size = getClientSize(hwnd);
+    const font_size = getFontSize(i32, dpi, cache);
     const status_y = client_size.y - font_size.y;
+    const old_font = win32.SelectObject(hdc, cache.getFont(dpi));
+    defer _ = win32.SelectObject(hdc, old_font);
 
     // NOTE: clearing the entire window first causes flickering
     //       see https://catch22.net/tuts/win32/flicker-free-drawing/
     //       TLDR; don't draw over the same pixel twice
-    const erase_bg = false;
-    if (erase_bg) {
-        const rect = win32.RECT{
-            .left = 0,
-            .top = 0,
-            .right = client_size.x,
-            .bottom = status_y,
-        };
-        _ = win32.FillRect(hdc, &rect, cache.getBrush(.void));
-    }
-
-    const viewport_rows = engine.global_view.getViewportRows();
-
-    _ = win32.SelectObject(hdc, cache.getFont(dpi));
-    _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_content));
-    _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
-    for (viewport_rows, 0..) |row, row_index_usize| {
-        const row_index: i32 = @intCast(row_index_usize);
-        const y: i32 = @intCast(row_index * font_size.y);
-        const row_str = row.getViewport(engine.global_view);
-        // NOTE: for now we only support ASCII
-        if (0 == win32.TextOutA(hdc, 0, y, @ptrCast(row_str), @intCast(row_str.len)))
-            std.debug.panic("TextOut failed, error={}", .{win32.GetLastError()});
-
-        if (!erase_bg) {
-            const end_of_line_x: usize = row_str.len * @as(usize, @intCast(font_size.x));
-            if (end_of_line_x < client_size.x) {
-                const rect = win32.RECT{
-                    .left = @intCast(end_of_line_x),
-                    .top = y,
-                    .right = client_size.x,
-                    .bottom = y + font_size.y,
-                };
-                _ = win32.FillRect(hdc, &rect, cache.getBrush(.void_bg));
-            }
-        }
-    }
-
-    if (!erase_bg) {
-        const end_of_file_y: usize = viewport_rows.len * @as(usize, @intCast(font_size.y));
-        if (end_of_file_y < status_y) {
+    switch (engine.global_current_pane) {
+        .welcome => {
             const rect = win32.RECT{
                 .left = 0,
-                .top = @intCast(end_of_file_y),
+                .top = 0,
                 .right = client_size.x,
                 .bottom = status_y,
             };
             _ = win32.FillRect(hdc, &rect, cache.getBrush(.void_bg));
-        }
-    }
 
-    // draw cursor
-    if (engine.global_view.cursor_pos) |cursor_global_pos| {
-        if (engine.global_view.toViewportPos(cursor_global_pos)) |cursor_viewport_pos| {
-            const viewport_pos = XY(i32){
-                .x = @intCast(cursor_viewport_pos.x * font_size.x),
-                .y = @intCast(cursor_viewport_pos.y * font_size.y),
-            };
-            const char_str: []const u8 = blk: {
-                if (cursor_viewport_pos.y >= viewport_rows.len) break :blk " ";
-                const row = &viewport_rows[cursor_viewport_pos.y];
-                const row_str = row.getViewport(engine.global_view);
-                if (cursor_viewport_pos.x >= row_str.len) break :blk " ";
-                break :blk row_str[cursor_viewport_pos.x..];
-            };
-            _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.cursor));
+            _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_void));
             _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
-            _ = win32.TextOutA(hdc, viewport_pos.x, viewport_pos.y, @ptrCast(char_str), 1);
-        }
+
+            const msg = win32.L("Welcome");
+            const x = @divTrunc(client_size.x - (font_size.x * @as(i32, msg.len)), 2);
+            const y = @divTrunc(client_size.y - font_size.y, 2);
+            if (0 == win32.TextOutW(hdc, x, y, msg.ptr, @intCast(msg.len))) medwin32.fatalWin32(
+                "TextOut",
+                win32.GetLastError(),
+            );
+        },
+        .file => |*view| {
+            const viewport_size: XY(usize) = .{
+                .x = @intCast(@divTrunc(client_size.x, font_size.x)),
+                .y = @intCast(@divTrunc(status_y, font_size.y)),
+            };
+            const viewport_rows = view.getViewportRows(viewport_size.y);
+
+            _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_content));
+            _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
+            for (viewport_rows, 0..) |row, row_index_usize| {
+                const row_index: i32 = @intCast(row_index_usize);
+                const y: i32 = @intCast(row_index * font_size.y);
+                const row_str = row.getViewport(view.*, viewport_size.x);
+                // NOTE: for now we only support ASCII
+                if (0 == win32.TextOutA(hdc, 0, y, @ptrCast(row_str), @intCast(row_str.len))) medwin32.fatalWin32(
+                    "TextOut",
+                    win32.GetLastError(),
+                );
+
+                {
+                    const end_of_line_x: usize = row_str.len * @as(usize, @intCast(font_size.x));
+                    if (end_of_line_x < client_size.x) {
+                        const rect = win32.RECT{
+                            .left = @intCast(end_of_line_x),
+                            .top = y,
+                            .right = client_size.x,
+                            .bottom = y + font_size.y,
+                        };
+                        _ = win32.FillRect(hdc, &rect, cache.getBrush(.void_bg));
+                    }
+                }
+            }
+
+            {
+                const end_of_file_y: usize = viewport_rows.len * @as(usize, @intCast(font_size.y));
+                if (end_of_file_y < status_y) {
+                    const rect = win32.RECT{
+                        .left = 0,
+                        .top = @intCast(end_of_file_y),
+                        .right = client_size.x,
+                        .bottom = status_y,
+                    };
+                    _ = win32.FillRect(hdc, &rect, cache.getBrush(.void_bg));
+                }
+            }
+
+            // draw cursor
+            if (view.cursor_pos) |cursor_global_pos| {
+                if (view.toViewportPos(viewport_size, cursor_global_pos)) |cursor_viewport_pos| {
+                    const viewport_pos = XY(i32){
+                        .x = @intCast(cursor_viewport_pos.x * font_size.x),
+                        .y = @intCast(cursor_viewport_pos.y * font_size.y),
+                    };
+                    const char_str: []const u8 = blk: {
+                        if (cursor_viewport_pos.y >= viewport_rows.len) break :blk " ";
+                        const row = &viewport_rows[cursor_viewport_pos.y];
+                        const row_str = row.getViewport(view.*, viewport_size.x);
+                        if (cursor_viewport_pos.x >= row_str.len) break :blk " ";
+                        break :blk row_str[cursor_viewport_pos.x..];
+                    };
+                    _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.cursor));
+                    _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
+                    _ = win32.TextOutA(hdc, viewport_pos.x, viewport_pos.y, @ptrCast(char_str), 1);
+                }
+            }
+        },
     }
 
-    if (engine.global_view.open_file_prompt) |*prompt| {
+    if (engine.global_open_file_prompt) |*prompt| {
         const rect = win32.RECT{
             .left = 0,
             .top = 0,
@@ -226,7 +243,7 @@ pub fn paint(
         const path = prompt.getPathConst();
         _ = win32.TextOutA(hdc, 0, 1 * font_size.y, @ptrCast(path.ptr), @intCast(path.len));
     }
-    if (engine.global_view.err_msg) |err_msg| {
+    if (engine.global_err_msg) |err_msg| {
         const rect = win32.RECT{
             .left = 0,
             .top = 0,
@@ -242,20 +259,25 @@ pub fn paint(
     }
 
     {
-        const status = engine.global_status.slice();
         _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_status));
         _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg_status));
+
+        const text = blk: {
+            if (engine.global_dialog) |dialog| {
+                break :blk dialog.getText();
+            }
+            break :blk engine.global_status.slice();
+        };
         if (0 == win32.TextOutA(
             hdc,
             0,
             status_y,
-            @ptrCast(status.ptr), // todo: win32 api shouldn't require null terminator
-            @intCast(status.len),
-        ))
-            std.debug.panic("TextOut failed, error={}", .{win32.GetLastError()});
+            @ptrCast(text.ptr), // todo: win32 api shouldn't require null terminator
+            @intCast(text.len),
+        )) medwin32.fatalWin32("TextOut", win32.GetLastError());
 
         {
-            const end_of_line_x: usize = @as(usize, engine.global_status.len) * @as(usize, @intCast(font_size.x));
+            const end_of_line_x: usize = @as(usize, text.len) * @as(usize, @intCast(font_size.x));
             if (end_of_line_x < client_size.x) {
                 const rect = win32.RECT{
                     .left = @intCast(end_of_line_x),
@@ -267,6 +289,4 @@ pub fn paint(
             }
         }
     }
-
-    _ = win32.EndPaint(hwnd, &ps);
 }
