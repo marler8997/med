@@ -31,7 +31,6 @@ const win32fix = struct {
 
 const L = win32.L;
 const HINSTANCE = win32.HINSTANCE;
-const MSG = win32.MSG;
 const HWND = win32.HWND;
 const HICON = win32.HICON;
 
@@ -44,6 +43,7 @@ const global = struct {
     var x11: if (build_options.enable_x11_backend) bool else void = undefined;
     var gdi_cache: gdi.ObjectCache = .{};
     var hwnd: win32.HWND = undefined;
+    var handles: std.ArrayListUnmanaged(win32.HANDLE) = .{};
 };
 
 pub fn oom(e: error{OutOfMemory}) noreturn {
@@ -225,12 +225,30 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
     }
 
     _ = win32.ShowWindow(global.hwnd, win32.SW_SHOW);
-    var msg: MSG = undefined;
-    while (win32.GetMessageW(&msg, null, 0, 0) != 0) {
-        // No need for TranslateMessage since we don't use WM_*CHAR messages
-        //_ = win32.TranslateMessage(&msg);
-        _ = win32.DispatchMessageW(&msg);
+
+    while (true) {
+        while (global.handles.items.len == 0) {
+            const msg = getMessage();
+            _ = win32.TranslateMessage(&msg);
+            _ = win32.DispatchMessageW(&msg);
+        }
+        @panic("TODO: implement waiting on handles");
     }
+}
+
+fn getMessage() win32.MSG {
+    var msg: win32.MSG = undefined;
+    const result = win32.GetMessageW(&msg, null, 0, 0);
+    if (result < 0) fatalWin32("GetMessage", win32.GetLastError());
+    if (result == 0) {
+        if (std.math.cast(u32, msg.wParam)) |c| {
+            std.log.info("quit {}", .{c});
+            win32.ExitProcess(c);
+        }
+        std.log.info("quit {} (0xffffffff)", .{msg.wParam});
+        return win32.ExitProcess(0xffffffff);
+    }
+    return msg;
 }
 
 // ============================================================
