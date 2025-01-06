@@ -7,7 +7,7 @@ const OnErr = @import("OnErr.zig");
 const platform = @import("platform.zig");
 const RefString = @import("RefString.zig");
 const oom = platform.oom;
-const Terminal = @import("Terminal.zig");
+const Process = @import("Process.zig");
 const View = @import("View.zig");
 const XY = @import("xy.zig").XY;
 
@@ -34,7 +34,7 @@ pub const global_status = struct {
 
 pub const Pane = union(enum) {
     welcome,
-    terminal: *Terminal,
+    process: *Process,
     file: *View,
 };
 
@@ -91,7 +91,7 @@ pub fn notifyKeyDown(press_kind: Input.KeyPressKind, key: Input.Keybind.Node) vo
 // End of the interface for the platform to use
 // ================================================================================
 
-var global_terminal: Terminal = .{
+var global_process: Process = .{
     .arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator),
 };
 var global_file: View = View.init();
@@ -183,7 +183,7 @@ const Dialog = struct {
             }, // ignore
             .open_file => {}, // ignore
             .save_file => {}, // ignore
-            .@"open-terminal" => {}, // ignore
+            .@"open-process" => {}, // ignore
             .kill_pane => {}, // ignore
             .quit => platform.quit(),
         }
@@ -309,7 +309,7 @@ fn handleAction(action: Input.Action) void {
             .kill_line => {}, // ignore
             .open_file => {}, // ignore
             .save_file => {}, // ignore
-            .@"open-terminal" => {}, // ignore
+            .@"open-process" => {}, // ignore
             .kill_pane => {}, // ignore
             .quit => platform.quit(),
         }
@@ -336,9 +336,9 @@ fn handleAction(action: Input.Action) void {
                     platform.beep();
                     reportErrorFmt("no file open", .{});
                 },
-                .terminal => |terminal| {
+                .process => |process| {
                     const ascii_str = [_]u8{ascii_code};
-                    terminal.addInput(&ascii_str) catch |e| switch (e) {
+                    process.addInput(&ascii_str) catch |e| switch (e) {
                         error.OutOfMemory => reportErrorFmt("oom", .{}),
                     };
                 },
@@ -408,8 +408,8 @@ fn handleAction(action: Input.Action) void {
                     platform.beep();
                     reportErrorFmt("no file open", .{});
                 },
-                .terminal => |terminal| {
-                    terminal.submitInput();
+                .process => |process| {
+                    process.submitInput();
                 },
                 .file => |view| {
                     if (view.cursor_pos) |*cursor_pos| {
@@ -453,7 +453,7 @@ fn handleAction(action: Input.Action) void {
                 platform.viewModified();
             } else switch (global_current_pane) {
                 .welcome => {},
-                .terminal => {},
+                .process => {},
                 .file => {},
             }
         },
@@ -463,8 +463,8 @@ fn handleAction(action: Input.Action) void {
                 //       we can just reuse it's functions for this
             } else switch (global_current_pane) {
                 .welcome => {},
-                .terminal => |terminal| if (terminal.@"cursor-back"()) {
-                    platform.terminalModified();
+                .process => |process| if (process.@"cursor-back"()) {
+                    platform.processModified();
                 },
                 .file => |view| {
                     if (view.cursorBack()) {
@@ -479,8 +479,8 @@ fn handleAction(action: Input.Action) void {
                 //       we can just reuse it's functions for this
             } else switch (global_current_pane) {
                 .welcome => {},
-                .terminal => |terminal| if (terminal.@"cursor-forward"()) {
-                    platform.terminalModified();
+                .process => |process| if (process.@"cursor-forward"()) {
+                    platform.processModified();
                 },
                 .file => |view| {
                     if (view.cursorForward()) {
@@ -495,7 +495,7 @@ fn handleAction(action: Input.Action) void {
                 //       we can just reuse it's functions for this
             } else switch (global_current_pane) {
                 .welcome => {},
-                .terminal => {},
+                .process => {},
                 .file => |view| {
                     if (view.cursorUp()) {
                         platform.viewModified();
@@ -509,7 +509,7 @@ fn handleAction(action: Input.Action) void {
                 //       we can just reuse it's functions for this
             } else switch (global_current_pane) {
                 .welcome => {},
-                .terminal => {},
+                .process => {},
                 .file => |view| {
                     if (view.cursorDown()) {
                         platform.viewModified();
@@ -523,8 +523,8 @@ fn handleAction(action: Input.Action) void {
                 //       we can just reuse it's functions for this
             } else switch (global_current_pane) {
                 .welcome => {},
-                .terminal => |terminal| if (terminal.@"cursor-line-start"()) {
-                    platform.terminalModified();
+                .process => |process| if (process.@"cursor-line-start"()) {
+                    platform.processModified();
                 },
                 .file => |view| {
                     if (view.cursorLineStart()) {
@@ -539,8 +539,8 @@ fn handleAction(action: Input.Action) void {
                 //       we can just reuse it's functions for this
             } else switch (global_current_pane) {
                 .welcome => {},
-                .terminal => |terminal| if (terminal.@"cursor-line-end"()) {
-                    platform.terminalModified();
+                .process => |process| if (process.@"cursor-line-end"()) {
+                    platform.processModified();
                 },
                 .file => |view| {
                     if (view.cursorLineEnd()) {
@@ -554,8 +554,8 @@ fn handleAction(action: Input.Action) void {
                 reportErrorFmt("TODO: tab completion for open file prompt", .{});
             } else switch (global_current_pane) {
                 .welcome => {},
-                .terminal => |terminal| if (terminal.tab()) {
-                    platform.terminalModified();
+                .process => |process| if (process.tab()) {
+                    platform.processModified();
                 },
                 .file => |view| {
                     _ = view;
@@ -566,8 +566,8 @@ fn handleAction(action: Input.Action) void {
         .delete => {
             switch (global_current_pane) {
                 .welcome => {},
-                .terminal => |terminal| if (terminal.delete()) {
-                    platform.terminalModified();
+                .process => |process| if (process.delete()) {
+                    platform.processModified();
                 },
                 .file => |view| {
                     if (view.delete(.not_from_backspace) catch |e| oom(e)) {
@@ -581,8 +581,8 @@ fn handleAction(action: Input.Action) void {
                 std.log.info("todo: implement backspace for file prompt", .{});
             } else switch (global_current_pane) {
                 .welcome => {},
-                .terminal => |terminal| if (terminal.backspace()) {
-                    platform.terminalModified();
+                .process => |process| if (process.backspace()) {
+                    platform.processModified();
                 },
                 .file => |view| {
                     if (view.cursorBack()) {
@@ -597,8 +597,8 @@ fn handleAction(action: Input.Action) void {
                 @panic("todo: kill-line while opening file");
             } else switch (global_current_pane) {
                 .welcome => {},
-                .terminal => |terminal| if (terminal.backspace()) {
-                    platform.terminalModified();
+                .process => |process| if (process.backspace()) {
+                    platform.processModified();
                 },
                 .file => |view| {
                     if (view.killLine()) {
@@ -619,15 +619,15 @@ fn handleAction(action: Input.Action) void {
             }
         },
         .save_file => saveFile(),
-        .@"open-terminal" => {
+        .@"open-process" => {
             if (global_open_file_prompt) |_| {
-                std.log.err("cannot open terminal while opening file", .{});
-            } else if (global_current_pane != .terminal) {
-                global_terminal.start() catch |e| {
-                    reportErrorFmt("start terminal process failed with {s}", .{@errorName(e)});
+                std.log.err("cannot open process while opening file", .{});
+            } else if (global_current_pane != .process) {
+                global_process.start() catch |e| {
+                    reportErrorFmt("start process process failed with {s}", .{@errorName(e)});
                     return;
                 };
-                global_current_pane = Pane{ .terminal = &global_terminal };
+                global_current_pane = Pane{ .process = &global_process };
                 platform.paneModified();
             }
         },
@@ -678,9 +678,9 @@ fn saveFile() void {
             std.log.err("no file to save", .{});
             return;
         },
-        .terminal => {
+        .process => {
             platform.beep();
-            reportErrorFmt("save-file for terminal not implemented", .{});
+            reportErrorFmt("save-file for process not implemented", .{});
             return;
         },
         .file => |view| view,
@@ -770,8 +770,8 @@ fn @"kill-pane"(opt: struct { prompt_unsaved_changes: bool }) void {
             std.log.err("cannot kill the welcome pane", .{});
             return;
         },
-        .terminal => {
-            reportErrorFmt("TODO: implement kill-pane for terminal", .{});
+        .process => {
+            reportErrorFmt("TODO: implement kill-pane for process", .{});
             return;
         },
         .file => |view| {

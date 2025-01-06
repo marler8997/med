@@ -18,7 +18,7 @@ pub const Action = union(enum) {
     kill_line,
     open_file,
     save_file,
-    @"open-terminal",
+    @"open-process",
     kill_pane,
     quit,
 };
@@ -351,7 +351,7 @@ pub fn evaluateKeybind(
         },
         2 => if (keybind.buf[0].mods.control) switch (keybind.buf[0].key) {
             .comma => if (keybind.buf[1].mods.control) switch (keybind.buf[1].key) {
-                .comma => return .{ .action = .@"open-terminal" },
+                .comma => return .{ .action = .@"open-process" },
                 else => {},
             } else {},
             .x => if (keybind.buf[1].mods.control) switch (keybind.buf[1].key) {

@@ -38,7 +38,7 @@ const XY = @import("xy.zig").XY;
 const window_style_ex = win32.WINDOW_EX_STYLE{};
 const window_style = win32.WS_OVERLAPPEDWINDOW;
 
-const HandleCallback = *const fn (handle: win32.HANDLE) void;
+const HandleCallbackFn = *const fn (context: *anyopaque, handle: win32.HANDLE) void;
 
 const default_font_face_name = win32.L("SYSTEM_FIXED_FONT");
 
@@ -53,6 +53,11 @@ const global = struct {
     // seperate arrays so we can pass handles directly to the wait function
     var handles: std.ArrayListUnmanaged(win32.HANDLE) = .{};
     var handle_callbacks: std.ArrayListUnmanaged(HandleCallback) = .{};
+};
+
+const HandleCallback = struct {
+    context: *anyopaque,
+    func: HandleCallbackFn,
 };
 
 pub fn oom(e: error{OutOfMemory}) noreturn {
@@ -303,9 +308,8 @@ fn winmain() !void {
         );
 
         if (wait_result < global.handles.items.len) {
-            global.handle_callbacks.items[wait_result](
-                global.handles.items[wait_result],
-            );
+            const cb = &global.handle_callbacks.items[wait_result];
+            cb.func(cb.context, global.handles.items[wait_result]);
         } else {
             std.debug.assert(wait_result == global.handles.items.len);
         }
@@ -370,7 +374,7 @@ pub fn panic(
 pub const statusModified = viewModified;
 pub const errModified = viewModified;
 pub const dialogModified = viewModified;
-pub const terminalModified = viewModified;
+pub const processModified = viewModified;
 pub const paneModified = viewModified;
 pub fn viewModified() void {
     if (build_options.enable_x11_backend) {

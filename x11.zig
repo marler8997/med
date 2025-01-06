@@ -479,8 +479,8 @@ fn render() !void {
 
     switch (engine.global_current_pane) {
         .welcome => {},
-        .terminal => |terminal| {
-            _ = terminal;
+        .process => |process| {
+            _ = process;
             @panic("todo");
         },
         .file => |view| {

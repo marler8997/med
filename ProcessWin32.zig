@@ -30,19 +30,16 @@ pub fn start(out_err: *Win32Error) error{Win32}!Process {
         )) return out_err.set("SetInformationJobObject", win32.GetLastError());
     }
 
-    var stdin = try Pipe.init(out_err, .write);
+    var stdin = try Pipe.initSync(out_err);
     errdefer stdin.deinit();
     try setInherit(out_err, stdin.write);
-    //try win32.SetHandleInformation(read_handle, windows.HANDLE_FLAG_INHERIT, 0);
-    //rd.* = read_handle;
-    //wr.* = write_handle;
 
-    var stdout = try Pipe.init(out_err, .read);
+    var stdout = try Pipe.initAsync(out_err);
     errdefer stdout.deinit();
     try setInherit(out_err, stdout.read);
     //try setNonBlocking(out_err, stdout.read);
 
-    var stderr = try Pipe.init(out_err, .read);
+    var stderr = try Pipe.initAsync(out_err);
     errdefer stderr.deinit();
     try setInherit(out_err, stderr.read);
     //try setNonBlocking(out_err, stdout.read);
@@ -122,17 +119,36 @@ fn deinitProcess(
 
 var pipe_name_counter = std.atomic.Value(u32).init(1);
 
+fn closePipe(a: win32.HANDLE, b: win32.HANDLE) void {
+    win32.closeHandle(a);
+    win32.closeHandle(b);
+}
+
 const Pipe = struct {
     read: win32.HANDLE,
     write: win32.HANDLE,
 
     fn deinit(self: *Pipe) void {
-        win32.closeHandle(self.read);
-        win32.closeHandle(self.write);
+        closePipe(self.read, self.write);
         self.* = undefined;
     }
-    fn init(out_err: *Win32Error, direction: enum { read, write }) error{Win32}!Pipe {
-        //rd: *?windows.HANDLE, wr: *?windows.HANDLE,
+    pub fn initSync(out_err: *Win32Error) error{Win32}!Pipe {
+        var sec_attr = win32.SECURITY_ATTRIBUTES{
+            .nLength = @sizeOf(win32.SECURITY_ATTRIBUTES),
+            .bInheritHandle = 1,
+            .lpSecurityDescriptor = null,
+        };
+        var read: win32.HANDLE = undefined;
+        var write: win32.HANDLE = undefined;
+        if (0 == win32.CreatePipe(@ptrCast(&read), @ptrCast(&write), &sec_attr, 0)) return out_err.set(
+            "CreatePipe",
+            win32.GetLastError(),
+        );
+        errdefer closePipe(read, write);
+        //try windows.SetHandleInformation(write, windows.HANDLE_FLAG_INHERIT, 0);
+        return .{ .read = read, .write = write };
+    }
+    fn initAsync(out_err: *Win32Error) error{Win32}!Pipe {
         var tmp_bufw: [128]u16 = undefined;
         var sec_attr = win32.SECURITY_ATTRIBUTES{
             .nLength = @sizeOf(win32.SECURITY_ATTRIBUTES),
@@ -164,16 +180,12 @@ const Pipe = struct {
                 .FILE_ATTRIBUTE_READONLY = 1,
                 .FILE_FLAG_OVERLAPPED = 1,
             },
-            .{
-                .NOWAIT = switch (direction) {
-                    //.read => 1,
-                    .read => 0,
-                    .write => 0,
-                },
-            },
+            .{},
             1,
-            4096,
-            4096,
+            // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            // TODO: what the heck should I set these to?
+            std.mem.page_size,
+            std.mem.page_size,
             0,
             &sec_attr,
         );
@@ -181,7 +193,7 @@ const Pipe = struct {
             "CreateNamedPipe",
             win32.GetLastError(),
         );
-        errdefer win32.closeHandle(read.?);
+        errdefer win32.closeHandle(read);
 
         const write = win32.CreateFileW(
             pipe_path.ptr,
@@ -197,10 +209,8 @@ const Pipe = struct {
             win32.GetLastError(),
         );
         errdefer win32.closeHandle(write.?);
-        return .{
-            .read = read.?,
-            .write = write,
-        };
+
+        return .{ .read = read, .write = write };
     }
 };
 
