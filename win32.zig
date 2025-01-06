@@ -40,10 +40,13 @@ const window_style = win32.WS_OVERLAPPEDWINDOW;
 
 const HandleCallback = *const fn (handle: win32.HANDLE) void;
 
+const default_font_face_name = win32.L("SYSTEM_FIXED_FONT");
+
 const X11Option = if (build_options.enable_x11_backend) bool else void;
 const global = struct {
     var x11: X11Option = if (build_options.enable_x11_backend) false else {};
     var gdi_cache: gdi.ObjectCache = .{};
+    var font_face_name: [*:0]const u16 = default_font_face_name.ptr;
     var hwnd: win32.HWND = undefined;
     var arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
@@ -201,6 +204,10 @@ fn winmain() !void {
                     global.x11 = true;
                     return @import("x11.zig").go();
                 } else fatal("the x11 backend was not enabled in this build", .{});
+            } else if (std.mem.eql(u8, arg, "--font")) {
+                const font = it.next() orelse fatal("missing argument for --font", .{});
+                // HACK! std converts from wtf16 to wtf8...and we convert back to wtf16 here!
+                global.font_face_name = try std.unicode.wtf8ToWtf16LeAllocZ(arena, font);
             } else if (std.mem.eql(u8, arg, "--window-x")) {
                 const str = it.next() orelse fatal("missing argument for --window-x", .{});
                 cmdline_opt.@"window-x" = std.fmt.parseInt(i32, str, 10) catch fatal("invalid --window-x value '{s}'", .{str});
@@ -621,7 +628,7 @@ fn WindowProc(
             const client_size = gdi.getClientSize(hwnd);
             var ps: win32.PAINTSTRUCT = undefined;
             const hdc = win32.BeginPaint(hwnd, &ps) orelse fatalWin32("BeginPaint", win32.GetLastError());
-            gdi.paint(hdc, dpi, client_size, &global.gdi_cache);
+            gdi.paint(hdc, dpi, global.font_face_name, client_size, &global.gdi_cache);
             _ = win32.EndPaint(hwnd, &ps);
             return 0;
         },

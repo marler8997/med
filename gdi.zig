@@ -35,19 +35,25 @@ pub const ObjectCache = struct {
 
     font: ?struct {
         dpi: u32,
+        face_name: [*:0]const u16,
         handle: win32.HFONT,
     } = null,
 
-    pub fn getFont(self: *ObjectCache, dpi: u32) win32.HFONT {
+    pub fn getFont(self: *ObjectCache, dpi: u32, face_name: [*:0]const u16) win32.HFONT {
         if (self.font) |font| {
-            if (font.dpi == dpi)
+            if (font.dpi == dpi and font.face_name == face_name)
                 return font.handle;
-            std.log.info("deleting old font for dpi {}", .{font.dpi});
+            std.log.info(
+                "deleting old font '{}' for dpi {}",
+                .{ std.unicode.fmtUtf16le(std.mem.span(font.face_name)), font.dpi },
+            );
             deleteObject(font.handle);
             self.font = null;
         }
 
         self.font = .{
+            .dpi = dpi,
+            .face_name = face_name,
             .handle = win32.CreateFontW(
                 win32.scaleDpi(i32, 20, dpi), // height
                 0, // width
@@ -62,9 +68,8 @@ pub const ObjectCache = struct {
                 .{}, // outprecision, clipprecision
                 .PROOF_QUALITY, // quality
                 .MODERN, // pitch and family
-                win32.L("SYSTEM_FIXED_FONT"), // face name
+                face_name,
             ) orelse medwin32.fatalWin32("CreateFont", win32.GetLastError()),
-            .dpi = dpi,
         };
         return self.font.?.handle;
     }
@@ -100,11 +105,11 @@ fn colorrefFromRgb(rgb: theme.Rgb) u32 {
     return (@as(u32, rgb.r) << 0) | (@as(u32, rgb.g) << 8) | (@as(u32, rgb.b) << 16);
 }
 
-pub fn getFontSize(comptime T: type, dpi: u32, cache: *ObjectCache) XY(T) {
+pub fn getFontSize(comptime T: type, dpi: u32, face_name: [*:0]const u16, cache: *ObjectCache) XY(T) {
     const hdc = win32.CreateCompatibleDC(null);
     defer if (0 == win32.DeleteDC(hdc)) medwin32.fatalWin32("DeleteDC", win32.GetLastError());
 
-    const font = cache.getFont(dpi);
+    const font = cache.getFont(dpi, face_name);
 
     const old_font = win32.SelectObject(hdc, font);
     defer _ = win32.SelectObject(hdc, old_font);
@@ -128,12 +133,13 @@ pub fn getFontSize(comptime T: type, dpi: u32, cache: *ObjectCache) XY(T) {
 pub fn paint(
     hdc: win32.HDC,
     dpi: u32,
+    font_face_name: [*:0]const u16,
     client_size: XY(i32),
     cache: *ObjectCache,
 ) void {
-    const font_size = getFontSize(i32, dpi, cache);
+    const font_size = getFontSize(i32, dpi, font_face_name, cache);
     const status_y = client_size.y - font_size.y;
-    const old_font = win32.SelectObject(hdc, cache.getFont(dpi));
+    const old_font = win32.SelectObject(hdc, cache.getFont(dpi, font_face_name));
     defer _ = win32.SelectObject(hdc, old_font);
 
     // NOTE: clearing the entire window first causes flickering
