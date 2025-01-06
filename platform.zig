@@ -19,6 +19,9 @@ pub const terminalModified = impl.terminalModified;
 pub const viewModified = impl.viewModified;
 pub const paneModified = impl.paneModified;
 pub const beep = impl.beep;
+
+pub const addHandle = impl.addHandle;
+pub const removeHandle = impl.removeHandle;
 // ================================================================================
 // End of the interface for the engine to use
 // ================================================================================

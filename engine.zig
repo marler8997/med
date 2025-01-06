@@ -336,7 +336,12 @@ fn handleAction(action: Input.Action) void {
                     platform.beep();
                     reportErrorFmt("no file open", .{});
                 },
-                .terminal => {},
+                .terminal => |terminal| {
+                    const ascii_str = [_]u8{ascii_code};
+                    terminal.addInput(&ascii_str) catch |e| switch (e) {
+                        error.OutOfMemory => reportErrorFmt("oom", .{}),
+                    };
+                },
                 .file => |view| {
                     if (view.cursor_pos) |*cursor_pos| {
                         if (cursor_pos.y >= view.rows.items.len) {
@@ -618,6 +623,10 @@ fn handleAction(action: Input.Action) void {
             if (global_open_file_prompt) |_| {
                 std.log.err("cannot open terminal while opening file", .{});
             } else if (global_current_pane != .terminal) {
+                global_terminal.start() catch |e| {
+                    reportErrorFmt("start terminal process failed with {s}", .{@errorName(e)});
+                    return;
+                };
                 global_current_pane = Pane{ .terminal = &global_terminal };
                 platform.paneModified();
             }

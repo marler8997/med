@@ -39,11 +39,17 @@ const XY = @import("xy.zig").XY;
 const window_style_ex = win32.WINDOW_EX_STYLE{};
 const window_style = win32.WS_OVERLAPPEDWINDOW;
 
+const HandleCallback = *const fn (handle: win32.HANDLE) void;
+
 const global = struct {
     var x11: if (build_options.enable_x11_backend) bool else void = undefined;
     var gdi_cache: gdi.ObjectCache = .{};
     var hwnd: win32.HWND = undefined;
+    var arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+
+    // seperate arrays so we can pass handles directly to the wait function
     var handles: std.ArrayListUnmanaged(win32.HANDLE) = .{};
+    var handle_callbacks: std.ArrayListUnmanaged(HandleCallback) = .{};
 };
 
 pub fn oom(e: error{OutOfMemory}) noreturn {
@@ -228,27 +234,51 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
 
     while (true) {
         while (global.handles.items.len == 0) {
-            const msg = getMessage();
+            var msg: win32.MSG = undefined;
+            const result = win32.GetMessageW(&msg, null, 0, 0);
+            if (result < 0) fatalWin32("GetMessage", win32.GetLastError());
+            if (result == 0) onWmQuit(msg.wParam);
             _ = win32.TranslateMessage(&msg);
             _ = win32.DispatchMessageW(&msg);
         }
-        @panic("TODO: implement waiting on handles");
+
+        const wait_result = win32.MsgWaitForMultipleObjectsEx(
+            @intCast(global.handles.items.len),
+            global.handles.items.ptr,
+            win32.INFINITE,
+            win32.QS_ALLINPUT,
+            .{ .ALERTABLE = 1, .INPUTAVAILABLE = 1 },
+        );
+
+        if (wait_result < global.handles.items.len) {
+            global.handle_callbacks.items[wait_result](
+                global.handles.items[wait_result],
+            );
+        } else {
+            std.debug.assert(wait_result == global.handles.items.len);
+        }
+
+        {
+            var msg: win32.MSG = undefined;
+            while (true) {
+                const result = win32.PeekMessageW(&msg, null, 0, 0, win32.PM_REMOVE);
+                if (result < 0) fatalWin32("PeekMessage", win32.GetLastError());
+                if (result == 0) break;
+                if (msg.message == win32.WM_QUIT) onWmQuit(msg.wParam);
+                _ = win32.TranslateMessage(&msg);
+                _ = win32.DispatchMessageW(&msg);
+            }
+        }
     }
 }
 
-fn getMessage() win32.MSG {
-    var msg: win32.MSG = undefined;
-    const result = win32.GetMessageW(&msg, null, 0, 0);
-    if (result < 0) fatalWin32("GetMessage", win32.GetLastError());
-    if (result == 0) {
-        if (std.math.cast(u32, msg.wParam)) |c| {
-            std.log.info("quit {}", .{c});
-            win32.ExitProcess(c);
-        }
-        std.log.info("quit {} (0xffffffff)", .{msg.wParam});
-        return win32.ExitProcess(0xffffffff);
+fn onWmQuit(wparam: win32.WPARAM) noreturn {
+    if (std.math.cast(u32, wparam)) |c| {
+        std.log.info("quit {}", .{c});
+        win32.ExitProcess(c);
     }
-    return msg;
+    std.log.info("quit {} (0xffffffff)", .{wparam});
+    win32.ExitProcess(0xffffffff);
 }
 
 // ============================================================
@@ -301,6 +331,20 @@ pub fn viewModified() void {
 pub fn beep() void {
     _ = win32.MessageBeep(@as(u32, @bitCast(win32.MB_OK)));
 }
+
+pub fn addHandle(handle: win32.HANDLE, cb: HandleCallback) bool {
+    for (global.handles.items) |existing| {
+        if (existing == handle) return false;
+    }
+    global.handles.append(global.arena_instance.allocator(), handle) catch |e| oom(e);
+    global.handle_callbacks.append(global.arena_instance.allocator(), cb) catch |e| oom(e);
+    return true;
+}
+pub fn removeHandle(handle: win32.HANDLE) bool {
+    _ = handle;
+    @panic("todo: implement removeHandle");
+}
+
 // ============================================================
 // End of the interface for the engine to use
 // ============================================================
