@@ -65,28 +65,35 @@ pub fn fatal(comptime fmt: []const u8, args: anytype) noreturn {
     std.posix.exit(0xff);
 }
 
+const WindowPlacementOptions = struct {
+    x: ?i32,
+    y: ?i32,
+};
+
 const WindowPlacement = struct {
     dpi: XY(u32),
     size: XY(i32),
     pos: XY(i32),
-    pub const default: WindowPlacement = .{
-        .dpi = .{
-            .x = 96,
-            .y = 96,
-        },
-        .pos = .{
-            .x = win32.CW_USEDEFAULT,
-            .y = win32.CW_USEDEFAULT,
-        },
-        .size = .{
-            .x = win32.CW_USEDEFAULT,
-            .y = win32.CW_USEDEFAULT,
-        },
-    };
+    pub fn default(opt: WindowPlacementOptions) WindowPlacement {
+        return .{
+            .dpi = .{
+                .x = 96,
+                .y = 96,
+            },
+            .pos = .{
+                .x = if (opt.x) |x| x else win32.CW_USEDEFAULT,
+                .y = if (opt.y) |y| y else win32.CW_USEDEFAULT,
+            },
+            .size = .{
+                .x = win32.CW_USEDEFAULT,
+                .y = win32.CW_USEDEFAULT,
+            },
+        };
+    }
 };
 
-fn calcWindowPlacement() WindowPlacement {
-    var result = WindowPlacement.default;
+fn calcWindowPlacement(opt: WindowPlacementOptions) WindowPlacement {
+    var result = WindowPlacement.default(opt);
 
     const monitor = win32.MonitorFromPoint(
         .{ .x = 0, .y = 0 },
@@ -141,8 +148,8 @@ fn calcWindowPlacement() WindowPlacement {
     };
     result.pos = .{
         // TODO: maybe we should shift this window away from the center?
-        .x = work_rect.left + @divTrunc(work_size.x - result.size.x, 2),
-        .y = work_rect.top + @divTrunc(work_size.y - result.size.y, 2),
+        .x = if (opt.x) |x| x else work_rect.left + @divTrunc(work_size.x - result.size.x, 2),
+        .y = if (opt.y) |y| y else work_rect.top + @divTrunc(work_size.y - result.size.y, 2),
     };
     return result;
 }
@@ -155,7 +162,10 @@ pub fn go(cmdline_opt: CmdlineOpt) !void {
         }
     }
 
-    const initial_placement = calcWindowPlacement();
+    const initial_placement = calcWindowPlacement(.{
+        .x = cmdline_opt.@"window-x",
+        .y = cmdline_opt.@"window-y",
+    });
     const icons = getIcons(initial_placement.dpi);
 
     const CLASS_NAME = L("Med");

@@ -45,8 +45,10 @@ pub fn main() !u8 {
     const args = blk: {
         const all_args = cmdlineArgs();
         var non_option_len: usize = 0;
-        for (all_args) |arg_ptr| {
-            const arg = std.mem.span(arg_ptr);
+        var arg_index: usize = 0;
+        while (arg_index < all_args.len) {
+            const arg = std.mem.span(all_args[arg_index]);
+            arg_index += 1;
             if (!std.mem.startsWith(u8, arg, "-")) {
                 all_args[non_option_len] = arg;
                 non_option_len += 1;
@@ -54,6 +56,16 @@ pub fn main() !u8 {
                 if (build_options.enable_x11_backend) {
                     cmdline_opt.x11 = true;
                 } else fatal("the x11 backend was not enabled in this build", .{});
+            } else if (std.mem.eql(u8, arg, "--window-x")) {
+                if (arg_index >= all_args.len) fatal("missing argument for --window-x", .{});
+                const str = std.mem.span(all_args[arg_index]);
+                arg_index += 1;
+                cmdline_opt.@"window-x" = std.fmt.parseInt(i32, str, 10) catch fatal("invalid --window-x value '{s}'", .{str});
+            } else if (std.mem.eql(u8, arg, "--window-y")) {
+                if (arg_index >= all_args.len) fatal("missing argument for --window-y", .{});
+                const str = std.mem.span(all_args[arg_index]);
+                arg_index += 1;
+                cmdline_opt.@"window-y" = std.fmt.parseInt(i32, str, 10) catch fatal("invalid --window-x value '{s}'", .{str});
             } else {
                 fatal("unknown cmdline option '{s}'", .{arg});
             }
