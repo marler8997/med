@@ -2,7 +2,6 @@ const builtin = @import("builtin");
 const std = @import("std");
 const x = @import("x");
 
-const CmdlineOpt = @import("CmdlineOpt.zig");
 const Input = @import("Input.zig");
 const engine = @import("engine.zig");
 const common = @import("x11common.zig");
@@ -181,9 +180,7 @@ const Keymap = struct {
     }
 };
 
-pub fn go(cmdline_opt: CmdlineOpt) !void {
-    _ = cmdline_opt;
-
+pub fn go() !void {
     try x.wsaStartup();
 
     var arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);

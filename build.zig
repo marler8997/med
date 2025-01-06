@@ -16,7 +16,10 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "med",
-        .root_source_file = b.path("main.zig"),
+        .root_source_file = switch (target.result.os.tag) {
+            .windows => b.path("win32.zig"),
+            else => b.path("posix.zig"),
+        },
         .target = target,
         .optimize = optimize,
         .single_threaded = true,
@@ -30,6 +33,7 @@ pub fn build(b: *std.Build) void {
     }
     if (target.result.os.tag == .windows) {
         exe.subsystem = .Windows;
+        exe.mingw_unicode_entry_point = true;
         exe.root_module.addImport("win32", zigwin32_dep.module("zigwin32"));
         const res_inc = b.path("res/inc");
         exe.addIncludePath(res_inc);

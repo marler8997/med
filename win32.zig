@@ -1,7 +1,6 @@
 const builtin = @import("builtin");
 const std = @import("std");
 const build_options = @import("build_options");
-const CmdlineOpt = @import("CmdlineOpt.zig");
 const engine = @import("engine.zig");
 const cimport = @cImport({
     @cInclude("MedResourceNames.h");
@@ -41,8 +40,9 @@ const window_style = win32.WS_OVERLAPPEDWINDOW;
 
 const HandleCallback = *const fn (handle: win32.HANDLE) void;
 
+const X11Option = if (build_options.enable_x11_backend) bool else void;
 const global = struct {
-    var x11: if (build_options.enable_x11_backend) bool else void = undefined;
+    var x11: X11Option = if (build_options.enable_x11_backend) false else {};
     var gdi_cache: gdi.ObjectCache = .{};
     var hwnd: win32.HWND = undefined;
     var arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -160,11 +160,56 @@ fn calcWindowPlacement(opt: WindowPlacementOptions) WindowPlacement {
     return result;
 }
 
-pub fn go(cmdline_opt: CmdlineOpt) !void {
-    if (build_options.enable_x11_backend) {
-        global.x11 = cmdline_opt.x11;
-        if (cmdline_opt.x11) {
-            return @import("x11.zig").go(cmdline_opt);
+pub export fn wWinMain(
+    hinstance: win32.HINSTANCE,
+    _: ?win32.HINSTANCE,
+    cmdline: [*:0]u16,
+    cmdshow: c_int,
+) c_int {
+    _ = hinstance;
+    _ = cmdline;
+    _ = cmdshow;
+    winmain() catch |err| {
+        // TODO: put this error information elsewhere, maybe a file, maybe
+        //       show it in the error messagebox
+        std.log.err("{s}", .{@errorName(err)});
+        if (@errorReturnTrace()) |trace| {
+            std.debug.dumpStackTrace(trace.*);
+        }
+        _ = win32.MessageBoxA(null, @errorName(err), "Med Error", .{ .ICONASTERISK = 1 });
+        return -1;
+    };
+    return 0;
+}
+fn winmain() !void {
+    var arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    // no need to deinit
+    const arena = arena_instance.allocator();
+
+    var cmdline_opt: struct {
+        @"window-x": ?i32 = null,
+        @"window-y": ?i32 = null,
+    } = .{};
+
+    {
+        var it = try std.process.ArgIterator.initWithAllocator(arena);
+        defer it.deinit();
+        std.debug.assert(it.skip()); // skip the executable name
+        while (it.next()) |arg| {
+            if (std.mem.eql(u8, arg, "--x11")) {
+                if (build_options.enable_x11_backend) {
+                    global.x11 = true;
+                    return @import("x11.zig").go();
+                } else fatal("the x11 backend was not enabled in this build", .{});
+            } else if (std.mem.eql(u8, arg, "--window-x")) {
+                const str = it.next() orelse fatal("missing argument for --window-x", .{});
+                cmdline_opt.@"window-x" = std.fmt.parseInt(i32, str, 10) catch fatal("invalid --window-x value '{s}'", .{str});
+            } else if (std.mem.eql(u8, arg, "--window-y")) {
+                const str = it.next() orelse fatal("missing argument for --window-y", .{});
+                cmdline_opt.@"window-y" = std.fmt.parseInt(i32, str, 10) catch fatal("invalid --window-x value '{s}'", .{str});
+            } else {
+                fatal("unknown cmdline option '{s}'", .{arg});
+            }
         }
     }
 
