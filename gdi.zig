@@ -3,6 +3,7 @@ const win32 = @import("win32").everything;
 
 const engine = @import("engine.zig");
 const theme = @import("theme.zig");
+const PagedMem = @import("pagedmem.zig").PagedMem;
 const Process = @import("Process.zig");
 const XY = @import("xy.zig").XY;
 
@@ -154,14 +155,12 @@ pub fn paint(
 
     switch (engine.global_current_pane) {
         .welcome => {
-            const rect = win32.RECT{
+            fillRect(hdc, .{
                 .left = 0,
                 .top = 0,
                 .right = client_size.x,
                 .bottom = status_y,
-            };
-            _ = win32.FillRect(hdc, &rect, cache.getBrush(.void_bg));
-
+            }, cache.getBrush(.void_bg));
             _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_void));
             _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
 
@@ -197,13 +196,12 @@ pub fn paint(
                 {
                     const end_of_line_x: usize = row_str.len * @as(usize, @intCast(font_size.x));
                     if (end_of_line_x < client_size.x) {
-                        const rect = win32.RECT{
+                        fillRect(hdc, .{
                             .left = @intCast(end_of_line_x),
                             .top = y,
                             .right = client_size.x,
                             .bottom = y + font_size.y,
-                        };
-                        _ = win32.FillRect(hdc, &rect, cache.getBrush(.void_bg));
+                        }, cache.getBrush(.void_bg));
                     }
                 }
             }
@@ -211,13 +209,12 @@ pub fn paint(
             {
                 const end_of_file_y: usize = viewport_rows.len * @as(usize, @intCast(font_size.y));
                 if (end_of_file_y < status_y) {
-                    const rect = win32.RECT{
+                    fillRect(hdc, .{
                         .left = 0,
                         .top = @intCast(end_of_file_y),
                         .right = client_size.x,
                         .bottom = status_y,
-                    };
-                    _ = win32.FillRect(hdc, &rect, cache.getBrush(.void_bg));
+                    }, cache.getBrush(.void_bg));
                 }
             }
 
@@ -244,13 +241,12 @@ pub fn paint(
     }
 
     if (engine.global_open_file_prompt) |*prompt| {
-        const rect = win32.RECT{
+        fillRect(hdc, .{
             .left = 0,
             .top = 0,
             .right = client_size.x,
             .bottom = font_size.y * 2,
-        };
-        _ = win32.FillRect(hdc, &rect, cache.getBrush(.menu_bg));
+        }, cache.getBrush(.menu_bg));
         _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_menu));
         _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
         const msg = "Open File:";
@@ -259,13 +255,12 @@ pub fn paint(
         _ = win32.TextOutA(hdc, 0, 1 * font_size.y, @ptrCast(path.ptr), @intCast(path.len));
     }
     if (engine.global_err_msg) |err_msg| {
-        const rect = win32.RECT{
+        fillRect(hdc, .{
             .left = 0,
             .top = 0,
             .right = client_size.x,
             .bottom = font_size.y * 2,
-        };
-        _ = win32.FillRect(hdc, &rect, cache.getBrush(.menu_bg));
+        }, cache.getBrush(.menu_bg));
         _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_menu));
         _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.err));
         const msg = "Error:";
@@ -294,23 +289,92 @@ pub fn paint(
         {
             const end_of_line_x: usize = @as(usize, text.len) * @as(usize, @intCast(font_size.x));
             if (end_of_line_x < client_size.x) {
-                const rect = win32.RECT{
+                fillRect(hdc, .{
                     .left = @intCast(end_of_line_x),
                     .top = status_y,
                     .right = client_size.x,
                     .bottom = client_size.y,
-                };
-                _ = win32.FillRect(hdc, &rect, cache.getBrush(.status_bg));
+                }, cache.getBrush(.status_bg));
             }
         }
     }
 }
 
+pub fn utf8ToUtf16LeScalar(
+    utf8: []const u8,
+) error{ Utf8InvalidStartByte, Truncated }!struct {
+    len: usize,
+    char: ?u16,
+} {
+    std.debug.assert(utf8.len > 0);
+    const sequence_len = try std.unicode.utf8ByteSequenceLength(utf8[0]);
+    if (sequence_len > utf8.len) return error.Truncated;
+    var result_buf: [7]u16 = undefined;
+    const len = std.unicode.utf8ToUtf16Le(
+        &result_buf,
+        utf8[0..sequence_len],
+    ) catch |err| switch (err) {
+        error.InvalidUtf8 => return .{
+            .len = sequence_len,
+            .char = null,
+        },
+    };
+    std.debug.assert(len == 1);
+    return .{
+        .len = sequence_len,
+        .char = result_buf[0],
+    };
+}
+
+const Utf8TextIterator = struct {
+    utf8: []const u8,
+    offset: usize = 0,
+    pub fn next(self: *Utf8TextIterator) ?u16 {
+        if (self.offset >= self.utf8.len) return null;
+
+        const decoded = utf8ToUtf16LeScalar(
+            self.utf8[self.offset..],
+        ) catch |e| switch (e) {
+            error.Truncated => {
+                self.offset = self.utf8.len;
+                return std.unicode.replacement_character;
+            },
+            error.Utf8InvalidStartByte => {
+                self.offset += 1;
+                return std.unicode.replacement_character;
+            },
+        };
+        self.offset += decoded.len;
+        return decoded.char orelse std.unicode.replacement_character;
+    }
+};
+const PagedMemTextIterator = struct {
+    paged_mem: *const PagedMem(std.mem.page_size),
+    offset: usize,
+    line_end: usize,
+    pub fn next(self: *PagedMemTextIterator) ?u16 {
+        if (self.offset >= self.line_end) return null;
+
+        const decoded = self.paged_mem.utf8ToUtf16LeScalar(
+            self.offset,
+            self.line_end,
+        ) catch |e| switch (e) {
+            error.Truncated => {
+                self.offset = self.line_end;
+                return std.unicode.replacement_character;
+            },
+            error.Utf8InvalidStartByte => {
+                self.offset += 1;
+                return std.unicode.replacement_character;
+            },
+        };
+        self.offset = decoded.end;
+        return decoded.char orelse std.unicode.replacement_character;
+    }
+};
+
 fn renderProcessOutput(
     hdc: win32.HDC,
-    //dpi: u32,
-    //font_face_name: [*:0]const u16,
-    //client_size: XY(i32),
     cache: *ObjectCache,
     font_size: XY(i32),
     process: *const Process,
@@ -318,6 +382,28 @@ fn renderProcessOutput(
 ) void {
     _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_content));
     _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
+
+    var bottom: i32 = rect.bottom;
+    if (process.command.items.len > 0) {
+        const top = bottom - font_size.y;
+
+        var text_it: Utf8TextIterator = .{
+            .utf8 = process.command.items,
+        };
+        const text_right = drawText(hdc, font_size, &text_it, .{
+            .left = rect.left,
+            .top = top,
+            .right = rect.right,
+        });
+        if (text_right < rect.right) fillRect(hdc, .{
+            .left = text_right,
+            .top = top,
+            .right = rect.right,
+            .bottom = bottom,
+        }, cache.getBrush(.void_bg));
+
+        bottom = top;
+    }
 
     const paged_mem = &process.paged_mem_stdout;
 
@@ -331,49 +417,25 @@ fn renderProcessOutput(
     }
 
     var line_end: usize = paged_mem.len;
-    var bottom: i32 = rect.bottom;
     while (bottom > rect.top) {
-        const top = bottom - font_size.y;
         const line_start = paged_mem.scanBackwardsScalar(line_end, '\n');
-
-        var left: i32 = rect.left;
-
-        var offset = line_start;
-        while (offset < line_end and left < rect.right) {
-            const char: u16 = blk: {
-                const decoded = paged_mem.utf8ToUtf16LeScalar(
-                    offset,
-                    line_end,
-                ) catch |e| switch (e) {
-                    error.Truncated => {
-                        offset = line_end;
-                        break :blk std.unicode.replacement_character;
-                    },
-                    error.Utf8InvalidStartByte => {
-                        offset += 1;
-                        break :blk std.unicode.replacement_character;
-                    },
-                };
-                offset = decoded.end;
-                break :blk decoded.char orelse std.unicode.replacement_character;
-            };
-
-            const str = [_:0]u16{char};
-            if (0 == win32.TextOutW(hdc, left, top, &str, 1)) medwin32.fatalWin32(
-                "TextOut",
-                win32.GetLastError(),
-            );
-            left += font_size.x;
-        }
-        if (left < rect.right) {
-            const trail_rect: win32.RECT = .{
-                .left = left,
-                .right = rect.right,
-                .top = top,
-                .bottom = bottom,
-            };
-            _ = win32.FillRect(hdc, &trail_rect, cache.getBrush(.void_bg));
-        }
+        var text_it: PagedMemTextIterator = .{
+            .paged_mem = paged_mem,
+            .offset = line_start,
+            .line_end = line_end,
+        };
+        const top = bottom - font_size.y;
+        const text_right = drawText(hdc, font_size, &text_it, .{
+            .left = rect.left,
+            .top = top,
+            .right = rect.right,
+        });
+        if (text_right < rect.right) fillRect(hdc, .{
+            .left = text_right,
+            .top = top,
+            .right = rect.right,
+            .bottom = bottom,
+        }, cache.getBrush(.void_bg));
         bottom = top;
 
         if (line_start == 0) break;
@@ -388,4 +450,33 @@ fn renderProcessOutput(
         };
         _ = win32.FillRect(hdc, &blank_rect, cache.getBrush(.void_bg));
     }
+}
+
+fn drawText(
+    hdc: win32.HDC,
+    font_size: XY(i32),
+    text_iterator: anytype,
+    box: struct {
+        left: i32,
+        right: i32,
+        top: i32,
+    },
+) i32 {
+    var left: i32 = box.left;
+    while (left < box.right) {
+        const char = text_iterator.next() orelse break;
+        const str = [_:0]u16{char};
+        if (0 == win32.TextOutW(hdc, left, box.top, &str, 1)) medwin32.fatalWin32(
+            "TextOut",
+            win32.GetLastError(),
+        );
+        left += font_size.x;
+    }
+    return left;
+}
+fn fillRect(hdc: win32.HDC, rect: win32.RECT, brush: win32.HBRUSH) void {
+    if (0 == win32.FillRect(hdc, &rect, brush)) medwin32.fatalWin32(
+        "FillRect",
+        win32.GetLastError(),
+    );
 }
