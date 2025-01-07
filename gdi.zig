@@ -27,6 +27,7 @@ const Brush = enum {
     content_bg,
     status_bg,
     menu_bg,
+    separator,
 };
 
 pub const ObjectCache = struct {
@@ -34,6 +35,7 @@ pub const ObjectCache = struct {
     brush_content_bg: ?win32.HBRUSH = null,
     brush_status_bg: ?win32.HBRUSH = null,
     brush_menu_bg: ?win32.HBRUSH = null,
+    brush_separator: ?win32.HBRUSH = null,
 
     font: ?struct {
         dpi: u32,
@@ -82,6 +84,7 @@ pub const ObjectCache = struct {
             .content_bg => &self.brush_content_bg,
             .status_bg => &self.brush_status_bg,
             .menu_bg => &self.brush_menu_bg,
+            .separator => &self.brush_separator,
         };
     }
 
@@ -93,6 +96,7 @@ pub const ObjectCache = struct {
                 .content_bg => theme.bg_content,
                 .status_bg => theme.bg_status,
                 .menu_bg => theme.bg_menu,
+                .separator => theme.separator,
             };
             brush_ref.* = win32.CreateSolidBrush(colorrefFromRgb(rgb)) orelse medwin32.fatalWin32(
                 "CreateSolidBrush",
@@ -172,7 +176,7 @@ pub fn paint(
                 win32.GetLastError(),
             );
         },
-        .process => |process| renderProcessOutput(hdc, cache, font_size, process, .{
+        .process => |process| renderProcessOutput(hdc, cache, dpi, font_size, process, .{
             .left = 0,
             .top = 0,
             .right = client_size.x,
@@ -376,6 +380,7 @@ const PagedMemTextIterator = struct {
 fn renderProcessOutput(
     hdc: win32.HDC,
     cache: *ObjectCache,
+    dpi: u32,
     font_size: XY(i32),
     process: *const Process,
     rect: win32.RECT,
@@ -405,17 +410,47 @@ fn renderProcessOutput(
         bottom = top;
     }
 
-    const paged_mem = &process.paged_mem_stdout;
+    const remaining_height: i32 = bottom - rect.top;
+    const separator_height = win32.scaleDpi(i32, 1, dpi);
+    const stdout_height: i32 = @divTrunc(remaining_height - separator_height, 2);
+    const separator_top: i32 = rect.top + stdout_height;
+    const stderr_top: i32 = separator_top + separator_height;
+    _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.err));
+    renderStream(hdc, cache, font_size, .{
+        .left = rect.left,
+        .top = stderr_top,
+        .right = rect.right,
+        .bottom = bottom,
+    }, &process.paged_mem_stderr);
+    fillRect(hdc, .{
+        .left = rect.left,
+        .top = separator_top,
+        .right = rect.right,
+        .bottom = stderr_top,
+    }, cache.getBrush(.separator));
+    _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
+    renderStream(hdc, cache, font_size, .{
+        .left = rect.left,
+        .top = rect.top,
+        .right = rect.right,
+        .bottom = separator_top,
+    }, &process.paged_mem_stdout);
+}
 
+fn renderStream(
+    hdc: win32.HDC,
+    cache: *ObjectCache,
+    font_size: XY(i32),
+    rect: win32.RECT,
+    paged_mem: *const PagedMem(std.mem.page_size),
+) void {
     if (paged_mem.len == 0) {
-        const msg = win32.L("waiting for output...");
-        if (0 == win32.TextOutW(hdc, 0, 0, msg.ptr, @intCast(msg.len))) medwin32.fatalWin32(
-            "TextOut",
-            win32.GetLastError(),
-        );
+        fillRect(hdc, rect, cache.getBrush(.void_bg));
+        // TODO: should we render a "no output" message or something?
         return;
     }
 
+    var bottom = rect.bottom;
     var line_end: usize = paged_mem.len;
     while (bottom > rect.top) {
         const line_start = paged_mem.scanBackwardsScalar(line_end, '\n');
@@ -442,13 +477,12 @@ fn renderProcessOutput(
         line_end = line_start - 1;
     }
     if (bottom > rect.top) {
-        const blank_rect: win32.RECT = .{
+        fillRect(hdc, .{
             .left = rect.left,
             .right = rect.right,
             .top = rect.top,
             .bottom = bottom,
-        };
-        _ = win32.FillRect(hdc, &blank_rect, cache.getBrush(.void_bg));
+        }, cache.getBrush(.void_bg));
     }
 }
 

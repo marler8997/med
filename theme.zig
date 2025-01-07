@@ -7,6 +7,8 @@ pub const fg         = Rgb{ .r = 0xba, .g = 0xb6, .b = 0xc0 };
 pub const fg_status  = Rgb{ .r = 0xba, .g = 0xb6, .b = 0xd0 };
 pub const cursor     = Rgb{ .r = 0x41, .g = 0x40, .b = 0x42 };
 
+pub const separator = Rgb{ .r = 0x60, .g = 0x60, .b = 0x60 };
+
 pub const bg_menu    = Rgb{ .r = 0x36, .g = 0x35, .b = 0x37 };
 pub const err        = Rgb{ .r = 0xfc, .g = 0x61, .b = 0x8d };
 // zig fmt: on
