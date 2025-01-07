@@ -211,8 +211,11 @@ pub fn delete(self: *Process) bool {
     return false;
 }
 pub fn backspace(self: *Process) bool {
-    _ = self;
-    std.log.err("TODO: implement terminal backspace", .{});
+    if (self.command_cursor_pos > 0) {
+        self.command_cursor_pos -= 1;
+        _ = self.command.orderedRemove(self.command_cursor_pos);
+        return true;
+    }
     return false;
 }
 pub fn @"kill-line"(self: *Process) bool {
