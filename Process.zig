@@ -6,7 +6,7 @@ const Impl = @import("ProcessWin32.zig");
 const Win32Error = @import("Win32Error.zig");
 const platform = @import("platform.zig");
 
-const PagedBuf = @import("PagedBuf.zig");
+const PagedMem = @import("pagedmem.zig").PagedMem;
 
 arena_instance: std.heap.ArenaAllocator,
 
@@ -15,8 +15,8 @@ overlapped_stdout: ?win32.OVERLAPPED = null,
 overlapped_stderr: ?win32.OVERLAPPED = null,
 handles_added: bool = false,
 
-paged_buf_stdout: PagedBuf = .{},
-paged_buf_stderr: PagedBuf = .{},
+paged_mem_stdout: PagedMem(std.mem.page_size) = .{},
+paged_mem_stderr: PagedMem(std.mem.page_size) = .{},
 
 command: std.ArrayListUnmanaged(u8) = .{},
 command_cursor_pos: usize = 0,
@@ -91,11 +91,11 @@ fn onStdReady(context: *anyopaque, handle: win32.HANDLE, kind: StdoutKind) void 
             .stdout => &self.overlapped_stdout.?,
             .stderr => &self.overlapped_stderr.?,
         };
-        const paged_buf: *PagedBuf = switch (kind) {
-            .stdout => &self.paged_buf_stdout,
-            .stderr => &self.paged_buf_stderr,
+        const paged_mem: *PagedMem(std.mem.page_size) = switch (kind) {
+            .stdout => &self.paged_mem_stdout,
+            .stderr => &self.paged_mem_stderr,
         };
-        const read_buf = paged_buf.getReadBuf() catch |e| oom(e);
+        const read_buf = paged_mem.getReadBuf() catch |e| oom(e);
         var read_len: u32 = undefined;
         if (0 == win32.ReadFile(
             handle,
@@ -124,7 +124,7 @@ fn onStdReady(context: *anyopaque, handle: win32.HANDLE, kind: StdoutKind) void 
 
         const data = read_buf[0..read_len];
         std.log.info("got {} bytes from {s}: '{}'", .{ read_len, @tagName(kind), std.zig.fmtEscapes(data) });
-        paged_buf.finishRead(read_len);
+        paged_mem.finishRead(read_len);
         platform.processModified();
     }
 }

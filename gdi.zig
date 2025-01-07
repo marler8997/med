@@ -319,9 +319,9 @@ fn renderProcessOutput(
     _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_content));
     _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
 
-    const paged_buf = &process.paged_buf_stdout;
+    const paged_mem = &process.paged_mem_stdout;
 
-    if (paged_buf.len == 0) {
+    if (paged_mem.len == 0) {
         const msg = win32.L("waiting for output...");
         if (0 == win32.TextOutW(hdc, 0, 0, msg.ptr, @intCast(msg.len))) medwin32.fatalWin32(
             "TextOut",
@@ -330,18 +330,21 @@ fn renderProcessOutput(
         return;
     }
 
-    var line_end: usize = paged_buf.len;
+    var line_end: usize = paged_mem.len;
     var bottom: i32 = rect.bottom;
     while (bottom > rect.top) {
         const top = bottom - font_size.y;
-        const line_start = paged_buf.scanBackwardsScalar(line_end, '\n');
+        const line_start = paged_mem.scanBackwardsScalar(line_end, '\n');
 
         var left: i32 = rect.left;
 
         var offset = line_start;
         while (offset < line_end and left < rect.right) {
             const char: u16 = blk: {
-                const decoded = paged_buf.utf8ToUtf16Le(offset, line_end) catch |e| switch (e) {
+                const decoded = paged_mem.utf8ToUtf16LeScalar(
+                    offset,
+                    line_end,
+                ) catch |e| switch (e) {
                     error.Truncated => {
                         offset = line_end;
                         break :blk std.unicode.replacement_character;
