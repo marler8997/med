@@ -316,9 +316,7 @@ fn renderProcessOutput(
     process: *const Process,
     rect: win32.RECT,
 ) void {
-    _ = win32.FillRect(hdc, &rect, cache.getBrush(.void_bg));
-
-    _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_void));
+    _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_content));
     _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
 
     const paged_buf = &process.paged_buf_stdout;
@@ -337,26 +335,36 @@ fn renderProcessOutput(
     while (bottom > rect.top) {
         const top = bottom - font_size.y;
         const line_start = paged_buf.scanBackwardsScalar(line_end, '\n');
-        var x: i32 = rect.left;
-        for (line_start..line_end) |char_offset| {
-            if (x >= rect.right) break;
-            const c = paged_buf.getByte(char_offset);
-            const str = [_:0]u8{c};
-            if (0 == win32.TextOutA(
-                hdc,
-                x,
-                top,
-                &str,
-                1,
-            )) medwin32.fatalWin32(
+
+        var left: i32 = rect.left;
+
+        var offset = line_start;
+        while (offset < line_end and left < rect.right) {
+            const char: u16 = blk: {
+                const decoded = paged_buf.utf8ToUtf16Le(offset, line_end) catch |e| switch (e) {
+                    error.Truncated => {
+                        offset = line_end;
+                        break :blk std.unicode.replacement_character;
+                    },
+                    error.Utf8InvalidStartByte => {
+                        offset += 1;
+                        break :blk std.unicode.replacement_character;
+                    },
+                };
+                offset = decoded.end;
+                break :blk decoded.char orelse std.unicode.replacement_character;
+            };
+
+            const str = [_:0]u16{char};
+            if (0 == win32.TextOutW(hdc, left, top, &str, 1)) medwin32.fatalWin32(
                 "TextOut",
                 win32.GetLastError(),
             );
-            x += font_size.x;
+            left += font_size.x;
         }
-        if (x < rect.right) {
+        if (left < rect.right) {
             const trail_rect: win32.RECT = .{
-                .left = x,
+                .left = left,
                 .right = rect.right,
                 .top = top,
                 .bottom = bottom,
@@ -375,6 +383,6 @@ fn renderProcessOutput(
             .top = rect.top,
             .bottom = bottom,
         };
-        _ = win32.FillRect(hdc, &blank_rect, cache.getBrush(.status_bg));
+        _ = win32.FillRect(hdc, &blank_rect, cache.getBrush(.void_bg));
     }
 }

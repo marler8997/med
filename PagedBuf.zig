@@ -51,3 +51,38 @@ pub fn scanBackwardsScalar(self: *const PagedBuf, limit: usize, what: u8) usize 
     }
     return 0;
 }
+
+pub fn utf8ToUtf16Le(
+    self: *const PagedBuf,
+    offset: usize,
+    limit: usize,
+) error{ Utf8InvalidStartByte, Truncated }!struct {
+    end: usize,
+    char: ?u16,
+} {
+    std.debug.assert(offset < self.len);
+    std.debug.assert(limit <= self.len);
+
+    var buf: [7]u8 = undefined;
+    buf[0] = self.getByte(offset);
+    const sequence_len = try std.unicode.utf8ByteSequenceLength(buf[0]);
+    if (offset + sequence_len > limit) return error.Truncated;
+    for (1..sequence_len) |i| {
+        buf[i] = self.getByte(offset + i);
+    }
+    var result_buf: [7]u16 = undefined;
+    const len = std.unicode.utf8ToUtf16Le(
+        &result_buf,
+        buf[0..sequence_len],
+    ) catch |err| switch (err) {
+        error.InvalidUtf8 => return .{
+            .end = offset + sequence_len,
+            .char = null,
+        },
+    };
+    std.debug.assert(len == 1);
+    return .{
+        .end = offset + sequence_len,
+        .char = result_buf[0],
+    };
+}
