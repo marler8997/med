@@ -321,7 +321,9 @@ fn renderProcessOutput(
     _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_void));
     _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
 
-    if (process.paged_buf_stdout.len == 0) {
+    const paged_buf = &process.paged_buf_stdout;
+
+    if (paged_buf.len == 0) {
         const msg = win32.L("waiting for output...");
         if (0 == win32.TextOutW(hdc, 0, 0, msg.ptr, @intCast(msg.len))) medwin32.fatalWin32(
             "TextOut",
@@ -330,23 +332,49 @@ fn renderProcessOutput(
         return;
     }
 
-    const height_px = rect.bottom - rect.top;
-    const row_count = blk: {
-        const min = @divTrunc(height_px, font_size.y);
-        break :blk min + @as(i32, if (min * font_size.y == height_px) 0 else 1);
-    };
-    var offset: usize = process.paged_buf_stdout.len;
+    var line_end: usize = paged_buf.len;
+    var bottom: i32 = rect.bottom;
+    while (bottom > rect.top) {
+        const top = bottom - font_size.y;
+        const line_start = paged_buf.scanBackwardsScalar(line_end, '\n');
+        var x: i32 = rect.left;
+        for (line_start..line_end) |char_offset| {
+            if (x >= rect.right) break;
+            const c = paged_buf.getByte(char_offset);
+            const str = [_:0]u8{c};
+            if (0 == win32.TextOutA(
+                hdc,
+                x,
+                top,
+                &str,
+                1,
+            )) medwin32.fatalWin32(
+                "TextOut",
+                win32.GetLastError(),
+            );
+            x += font_size.x;
+        }
+        if (x < rect.right) {
+            const trail_rect: win32.RECT = .{
+                .left = x,
+                .right = rect.right,
+                .top = top,
+                .bottom = bottom,
+            };
+            _ = win32.FillRect(hdc, &trail_rect, cache.getBrush(.void_bg));
+        }
+        bottom = top;
 
-    _ = row_count;
-    _ = &offset;
-    // const stdout_buf = process.paged_buf_stdout.last.?;
-    // _ = stdout_buf;
-    {
-        var buf: [100]u8 = undefined;
-        const msg = std.fmt.bufPrint(&buf, "TODO: render {} bytes of output", .{process.paged_buf_stdout.len}) catch unreachable;
-        if (0 == win32.TextOutA(hdc, 0, 0, @ptrCast(msg.ptr), @intCast(msg.len))) medwin32.fatalWin32(
-            "TextOut",
-            win32.GetLastError(),
-        );
+        if (line_start == 0) break;
+        line_end = line_start - 1;
+    }
+    if (bottom > rect.top) {
+        const blank_rect: win32.RECT = .{
+            .left = rect.left,
+            .right = rect.right,
+            .top = rect.top,
+            .bottom = bottom,
+        };
+        _ = win32.FillRect(hdc, &blank_rect, cache.getBrush(.status_bg));
     }
 }

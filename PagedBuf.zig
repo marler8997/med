@@ -34,3 +34,20 @@ pub fn finishRead(self: *PagedBuf, len: usize) void {
     std.debug.assert(len <= (self.getReadBuf() catch unreachable).len);
     self.len += len;
 }
+
+pub fn getByte(self: *const PagedBuf, offset: usize) u8 {
+    return self.mmu.items[@divTrunc(offset, std.mem.page_size)][offset % std.mem.page_size];
+}
+
+// returns the index immediately after the given `what` byte of the first
+// occurence searching in reverse
+pub fn scanBackwardsScalar(self: *const PagedBuf, limit: usize, what: u8) usize {
+    std.debug.assert(limit <= self.len);
+    var offset = limit;
+    while (offset > 0) {
+        const next_offset = offset - 1;
+        if (what == self.getByte(next_offset)) return offset;
+        offset = next_offset;
+    }
+    return 0;
+}
