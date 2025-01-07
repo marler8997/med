@@ -422,39 +422,25 @@ const WinKey = struct {
         const e_suffix: []const u8 = if (self.extended) "e" else "";
         try writer.print("{}{s}", .{ self.vk, e_suffix });
     }
-    fn digit(capitalize: bool, val: u16) Input.Key {
-        if (capitalize) return switch (val) {
-            0 => Input.Key.close_paren,
-            1 => Input.Key.bang,
-            2 => Input.Key.at,
-            3 => Input.Key.pound,
-            4 => Input.Key.dollar,
-            5 => Input.Key.percent,
-            6 => Input.Key.caret,
-            7 => Input.Key.ampersand,
-            8 => Input.Key.star,
-            9 => Input.Key.open_paren,
-            else => unreachable,
-        };
-        return @enumFromInt(@intFromEnum(Input.Key.@"0") + val);
-    }
-    pub fn toMed(self: WinKey, capitalize: bool) ?Input.Key {
+    pub fn toKey(self: WinKey) ?Input.Key {
         if (self.extended) return switch (self.vk) {
-            // @intFromEnum(win32.VK_RETURN) => input.key.kp_enter,
-            @intFromEnum(win32.VK_CONTROL) => Input.Key.control,
-            @intFromEnum(win32.VK_MENU) => Input.Key.alt,
-            // @intFromEnum(win32.VK_PRIOR) => Input.key.page_up,
-            // @intFromEnum(win32.VK_NEXT) => input.key.page_down,
-            // @intFromEnum(win32.VK_END) => input.key.end,
-            // @intFromEnum(win32.VK_HOME) => input.key.home,
-            // @intFromEnum(win32.VK_LEFT) => input.key.left,
-            // @intFromEnum(win32.VK_UP) => input.key.up,
-            // @intFromEnum(win32.VK_RIGHT) => input.key.right,
-            // @intFromEnum(win32.VK_DOWN) => input.key.down,
-            // @intFromEnum(win32.VK_INSERT) => input.key.insert,
-            // @intFromEnum(win32.VK_DELETE) => input.key.delete,
+            @intFromEnum(win32.VK_RETURN) => Input.todo.kp_enter,
+            @intFromEnum(win32.VK_CONTROL) => Input.todo.right_control,
+            @intFromEnum(win32.VK_MENU) => Input.todo.right_alt,
+            @intFromEnum(win32.VK_LWIN) => Input.todo.left_super,
+            @intFromEnum(win32.VK_RWIN) => Input.todo.right_super,
+            @intFromEnum(win32.VK_PRIOR) => Input.todo.page_up,
+            @intFromEnum(win32.VK_NEXT) => Input.todo.page_down,
+            @intFromEnum(win32.VK_END) => Input.todo.end,
+            @intFromEnum(win32.VK_HOME) => Input.todo.home,
+            @intFromEnum(win32.VK_LEFT) => Input.todo.left,
+            @intFromEnum(win32.VK_UP) => Input.todo.up,
+            @intFromEnum(win32.VK_RIGHT) => Input.todo.right,
+            @intFromEnum(win32.VK_DOWN) => Input.todo.down,
+            @intFromEnum(win32.VK_INSERT) => Input.todo.insert,
+            @intFromEnum(win32.VK_DELETE) => Input.todo.delete,
 
-            // @intFromEnum(win32.VK_DIVIDE) => input.key.kp_divide,
+            @intFromEnum(win32.VK_DIVIDE) => Input.todo.kp_divide,
 
             else => null,
         };
@@ -462,104 +448,106 @@ const WinKey = struct {
             @intFromEnum(win32.VK_BACK) => Input.Key.backspace,
             @intFromEnum(win32.VK_TAB) => Input.Key.tab,
             @intFromEnum(win32.VK_RETURN) => Input.Key.enter,
-            @intFromEnum(win32.VK_CONTROL) => Input.Key.control,
-            @intFromEnum(win32.VK_MENU) => Input.Key.alt,
-            // @intFromEnum(win32.VK_PAUSE) => Input.Key.pause,
-            // @intFromEnum(win32.VK_CAPITAL) => Input.Key.caps_lock,
+            // note: this could be left or right shift
+            @intFromEnum(win32.VK_SHIFT) => Input.todo.left_shift,
+            @intFromEnum(win32.VK_CONTROL) => Input.todo.left_control,
+            @intFromEnum(win32.VK_MENU) => Input.todo.left_alt,
+            @intFromEnum(win32.VK_PAUSE) => Input.todo.pause,
+            @intFromEnum(win32.VK_CAPITAL) => Input.todo.caps_lock,
             @intFromEnum(win32.VK_ESCAPE) => Input.Key.escape,
             @intFromEnum(win32.VK_SPACE) => Input.Key.space,
-            // @intFromEnum(win32.VK_PRIOR) => Input.Key.kp_page_up,
-            // @intFromEnum(win32.VK_NEXT) => Input.Key.kp_page_down,
-            // @intFromEnum(win32.VK_END) => Input.Key.kp_end,
-            // @intFromEnum(win32.VK_HOME) => Input.Key.kp_home,
-            // @intFromEnum(win32.VK_LEFT) => Input.Key.kp_left,
-            // @intFromEnum(win32.VK_UP) => Input.Key.kp_up,
-            // @intFromEnum(win32.VK_RIGHT) => Input.Key.kp_right,
-            // @intFromEnum(win32.VK_DOWN) => Input.Key.kp_down,
-            // @intFromEnum(win32.VK_SNAPSHOT) => Input.Key.print_screen,
-            // @intFromEnum(win32.VK_INSERT) => Input.Key.kp_insert,
-            // @intFromEnum(win32.VK_DELETE) => Input.Key.kp_delete,
+            @intFromEnum(win32.VK_PRIOR) => Input.todo.kp_page_up,
+            @intFromEnum(win32.VK_NEXT) => Input.todo.kp_page_down,
+            @intFromEnum(win32.VK_END) => Input.todo.kp_end,
+            @intFromEnum(win32.VK_HOME) => Input.todo.kp_home,
+            @intFromEnum(win32.VK_LEFT) => Input.todo.kp_left,
+            @intFromEnum(win32.VK_UP) => Input.todo.kp_up,
+            @intFromEnum(win32.VK_RIGHT) => Input.todo.kp_right,
+            @intFromEnum(win32.VK_DOWN) => Input.todo.kp_down,
+            @intFromEnum(win32.VK_SNAPSHOT) => Input.todo.print_screen,
+            @intFromEnum(win32.VK_INSERT) => Input.todo.kp_insert,
+            @intFromEnum(win32.VK_DELETE) => Input.todo.kp_delete,
 
-            '0'...'9' => |ascii| digit(capitalize, ascii - '0'),
-            'A'...'Z' => |ascii| @enumFromInt(ascii - 'A' + if (capitalize) @intFromEnum(Input.Key.A) else @intFromEnum(Input.Key.a)),
-
-            // @intFromEnum(win32.VK_LWIN) => Input.Key.left_meta,
-            // @intFromEnum(win32.VK_RWIN) => Input.Key.right_meta,
-            // @intFromEnum(win32.VK_NUMPAD0) => Input.Key.kp_0,
-            // @intFromEnum(win32.VK_NUMPAD1) => Input.Key.kp_1,
-            // @intFromEnum(win32.VK_NUMPAD2) => Input.Key.kp_2,
-            // @intFromEnum(win32.VK_NUMPAD3) => Input.Key.kp_3,
-            // @intFromEnum(win32.VK_NUMPAD4) => Input.Key.kp_4,
-            // @intFromEnum(win32.VK_NUMPAD5) => Input.Key.kp_5,
-            // @intFromEnum(win32.VK_NUMPAD6) => Input.Key.kp_6,
-            // @intFromEnum(win32.VK_NUMPAD7) => Input.Key.kp_7,
-            // @intFromEnum(win32.VK_NUMPAD8) => Input.Key.kp_8,
-            // @intFromEnum(win32.VK_NUMPAD9) => Input.Key.kp_9,
-            // @intFromEnum(win32.VK_MULTIPLY) => Input.Key.kp_multiply,
-            // @intFromEnum(win32.VK_ADD) => Input.Key.kp_add,
-            // @intFromEnum(win32.VK_SEPARATOR) => Input.Key.kp_separator,
-            // @intFromEnum(win32.VK_SUBTRACT) => Input.Key.kp_subtract,
-            // @intFromEnum(win32.VK_DECIMAL) => Input.Key.kp_decimal,
+            @intFromEnum(win32.VK_LWIN) => Input.todo.left_super,
+            @intFromEnum(win32.VK_RWIN) => Input.todo.right_super,
+            @intFromEnum(win32.VK_NUMPAD0) => Input.todo.kp_0,
+            @intFromEnum(win32.VK_NUMPAD1) => Input.todo.kp_1,
+            @intFromEnum(win32.VK_NUMPAD2) => Input.todo.kp_2,
+            @intFromEnum(win32.VK_NUMPAD3) => Input.todo.kp_3,
+            @intFromEnum(win32.VK_NUMPAD4) => Input.todo.kp_4,
+            @intFromEnum(win32.VK_NUMPAD5) => Input.todo.kp_5,
+            @intFromEnum(win32.VK_NUMPAD6) => Input.todo.kp_6,
+            @intFromEnum(win32.VK_NUMPAD7) => Input.todo.kp_7,
+            @intFromEnum(win32.VK_NUMPAD8) => Input.todo.kp_8,
+            @intFromEnum(win32.VK_NUMPAD9) => Input.todo.kp_9,
+            @intFromEnum(win32.VK_MULTIPLY) => Input.todo.kp_multiply,
+            @intFromEnum(win32.VK_ADD) => Input.todo.kp_add,
+            @intFromEnum(win32.VK_SEPARATOR) => Input.todo.kp_separator,
+            @intFromEnum(win32.VK_SUBTRACT) => Input.todo.kp_subtract,
+            @intFromEnum(win32.VK_DECIMAL) => Input.todo.kp_decimal,
             // odd, for some reason the divide key is considered extended?
-            //@intFromEnum(win32.VK_DIVIDE) => Input.Key.kp_divide,
-            // @intFromEnum(win32.VK_F1) => Input.Key.f1,
-            // @intFromEnum(win32.VK_F2) => Input.Key.f2,
-            // @intFromEnum(win32.VK_F3) => Input.Key.f3,
-            // @intFromEnum(win32.VK_F4) => Input.Key.f4,
-            // @intFromEnum(win32.VK_F5) => Input.Key.f5,
-            // @intFromEnum(win32.VK_F6) => Input.Key.f6,
-            // @intFromEnum(win32.VK_F7) => Input.Key.f8,
-            // @intFromEnum(win32.VK_F8) => Input.Key.f8,
-            // @intFromEnum(win32.VK_F9) => Input.Key.f9,
-            // @intFromEnum(win32.VK_F10) => Input.Key.f10,
-            // @intFromEnum(win32.VK_F11) => Input.Key.f11,
-            // @intFromEnum(win32.VK_F12) => Input.Key.f12,
-            // @intFromEnum(win32.VK_F13) => Input.Key.f13,
-            // @intFromEnum(win32.VK_F14) => Input.Key.f14,
-            // @intFromEnum(win32.VK_F15) => Input.Key.f15,
-            // @intFromEnum(win32.VK_F16) => Input.Key.f16,
-            // @intFromEnum(win32.VK_F17) => Input.Key.f17,
-            // @intFromEnum(win32.VK_F18) => Input.Key.f18,
-            // @intFromEnum(win32.VK_F19) => Input.Key.f19,
-            // @intFromEnum(win32.VK_F20) => Input.Key.f20,
-            // @intFromEnum(win32.VK_F21) => Input.Key.f21,
-            // @intFromEnum(win32.VK_F22) => Input.Key.f22,
-            // @intFromEnum(win32.VK_F23) => Input.Key.f23,
-            // @intFromEnum(win32.VK_F24) => Input.Key.f24,
-            // @intFromEnum(win32.VK_NUMLOCK) => Input.Key.num_lock,
-            // @intFromEnum(win32.VK_SCROLL) => Input.Key.scroll_lock,
-            // @intFromEnum(win32.VK_LSHIFT) => Input.Key.left_shift,
-            //@intFromEnum(win32.VK_10) => Input.Key.left_shift,
-            // @intFromEnum(win32.VK_RSHIFT) => Input.Key.right_shift,
-            @intFromEnum(win32.VK_LCONTROL) => Input.Key.control,
-            //@intFromEnum(win32.VK_11) => Input.Key.left_control,
-            @intFromEnum(win32.VK_RCONTROL) => Input.Key.control,
-            // @intFromEnum(win32.VK_LMENU) => Input.Key.left_alt,
-            //@intFromEnum(win32.VK_12) => Input.Key.left_alt,
-            // @intFromEnum(win32.VK_RMENU) => Input.Key.right_alt,
-            // @intFromEnum(win32.VK_VOLUME_MUTE) => Input.Key.mute_volume,
-            // @intFromEnum(win32.VK_VOLUME_DOWN) => Input.Key.lower_volume,
-            // @intFromEnum(win32.VK_VOLUME_UP) => Input.Key.raise_volume,
-            // @intFromEnum(win32.VK_MEDIA_NEXT_TRACK) => Input.Key.media_track_next,
-            // @intFromEnum(win32.VK_MEDIA_PREV_TRACK) => Input.Key.media_track_previous,
-            // @intFromEnum(win32.VK_MEDIA_STOP) => Input.Key.media_stop,
-            // @intFromEnum(win32.VK_MEDIA_PLAY_PAUSE) => Input.Key.media_play_pause,
-            @intFromEnum(win32.VK_OEM_COMMA) => Input.Key.comma,
+            //@intFromEnum(win32.VK_DIVIDE) => Input.todo.kp_divide,
+            @intFromEnum(win32.VK_F1) => Input.todo.f1,
+            @intFromEnum(win32.VK_F2) => Input.todo.f2,
+            @intFromEnum(win32.VK_F3) => Input.todo.f3,
+            @intFromEnum(win32.VK_F4) => Input.todo.f4,
+            @intFromEnum(win32.VK_F5) => Input.todo.f5,
+            @intFromEnum(win32.VK_F6) => Input.todo.f6,
+            @intFromEnum(win32.VK_F7) => Input.todo.f8,
+            @intFromEnum(win32.VK_F8) => Input.todo.f8,
+            @intFromEnum(win32.VK_F9) => Input.todo.f9,
+            @intFromEnum(win32.VK_F10) => Input.todo.f10,
+            @intFromEnum(win32.VK_F11) => Input.todo.f11,
+            @intFromEnum(win32.VK_F12) => Input.todo.f12,
+            @intFromEnum(win32.VK_F13) => Input.todo.f13,
+            @intFromEnum(win32.VK_F14) => Input.todo.f14,
+            @intFromEnum(win32.VK_F15) => Input.todo.f15,
+            @intFromEnum(win32.VK_F16) => Input.todo.f16,
+            @intFromEnum(win32.VK_F17) => Input.todo.f17,
+            @intFromEnum(win32.VK_F18) => Input.todo.f18,
+            @intFromEnum(win32.VK_F19) => Input.todo.f19,
+            @intFromEnum(win32.VK_F20) => Input.todo.f20,
+            @intFromEnum(win32.VK_F21) => Input.todo.f21,
+            @intFromEnum(win32.VK_F22) => Input.todo.f22,
+            @intFromEnum(win32.VK_F23) => Input.todo.f23,
+            @intFromEnum(win32.VK_F24) => Input.todo.f24,
+            @intFromEnum(win32.VK_NUMLOCK) => Input.todo.num_lock,
+            @intFromEnum(win32.VK_SCROLL) => Input.todo.scroll_lock,
+            @intFromEnum(win32.VK_LSHIFT) => Input.todo.left_shift,
+            @intFromEnum(win32.VK_RSHIFT) => Input.todo.right_shift,
+            @intFromEnum(win32.VK_LCONTROL) => Input.todo.left_control,
+            @intFromEnum(win32.VK_RCONTROL) => Input.todo.right_control,
+            @intFromEnum(win32.VK_LMENU) => Input.todo.left_alt,
+            @intFromEnum(win32.VK_RMENU) => Input.todo.right_alt,
+            @intFromEnum(win32.VK_VOLUME_MUTE) => Input.todo.mute_volume,
+            @intFromEnum(win32.VK_VOLUME_DOWN) => Input.todo.lower_volume,
+            @intFromEnum(win32.VK_VOLUME_UP) => Input.todo.raise_volume,
+            @intFromEnum(win32.VK_MEDIA_NEXT_TRACK) => Input.todo.media_track_next,
+            @intFromEnum(win32.VK_MEDIA_PREV_TRACK) => Input.todo.media_track_previous,
+            @intFromEnum(win32.VK_MEDIA_STOP) => Input.todo.media_stop,
+            @intFromEnum(win32.VK_MEDIA_PLAY_PAUSE) => Input.todo.media_play_pause,
             else => null,
         };
     }
 };
 
-fn lparamToScanCode(lparam: win32.LPARAM) u8 {
-    return @intCast((lparam >> 16) & 0xff);
-}
+const KeyFlags = packed struct(u32) {
+    repeat_count: u16,
+    scan_code: u8,
+    extended: bool,
+    reserved: u4,
+    context: bool,
+    previous: bool,
+    transition: bool,
+};
 
 fn wmKeyDown(wparam: win32.WPARAM, lparam: win32.LPARAM) void {
+    const key_flags: KeyFlags = @bitCast(@as(u32, @intCast(0xffffffff & lparam)));
     const winkey: WinKey = .{
         .vk = @intCast(0xffff & wparam),
-        .extended = (0 != (lparam & 0x1000000)),
+        .extended = key_flags.extended,
     };
-    const press_kind: Input.KeyPressKind = if (0 != (lparam & 0x40000000)) .repeat else .initial;
+    const press_kind: Input.KeyPressKind = if (key_flags.previous) .repeat else .initial;
 
     var keyboard_state: [256]u8 = undefined;
     if (0 == win32.GetKeyboardState(&keyboard_state)) fatalWin32(
@@ -569,31 +557,42 @@ fn wmKeyDown(wparam: win32.WPARAM, lparam: win32.LPARAM) void {
 
     const mods: Input.KeyMods = .{
         .control = (0 != keyboard_state[@intFromEnum(win32.VK_CONTROL)] & 0x80),
+        .alt = (0 != (keyboard_state[@intFromEnum(win32.VK_MENU)] & 0x80)),
     };
-    const shift_down = (0 != keyboard_state[@intFromEnum(win32.VK_SHIFT)] & 0x80);
-    const caps_lock_on = (0 != (keyboard_state[@intFromEnum(win32.VK_CAPITAL)] & 1));
-    const capitalize = shift_down or caps_lock_on;
-    if (winkey.toMed(capitalize)) |key| {
+    if (winkey.toKey()) |key| {
         engine.notifyKeyDown(press_kind, .{ .key = key, .mods = mods });
         return;
     }
 
-    var char_buf: [10]u16 = undefined;
+    // release control key when getting the unicode character of this key
+    //const save_control_state = keyboard_state[@intFromEnum(win32.VK_CONTROL)];
+    keyboard_state[@intFromEnum(win32.VK_CONTROL)] = 0;
+
+    const max_char_count = 20;
+    var char_buf: [max_char_count + 1]u16 = undefined;
     const unicode_result = win32.ToUnicode(
         @intCast(wparam),
-        lparamToScanCode(lparam),
+        key_flags.scan_code,
         &keyboard_state,
         @ptrCast(&char_buf),
-        char_buf.len,
+        max_char_count,
         0,
     );
-    if (unicode_result == 0) {
-        std.log.warn("unknown key", .{});
-        return;
-    }
 
     if (unicode_result < 0)
         return; // dead key
+
+    if (unicode_result > max_char_count) {
+        for (char_buf[0..@intCast(unicode_result)], 0..) |codepoint, i| {
+            std.log.err("UNICODE[{}] 0x{x} {d}", .{ i, codepoint, unicode_result });
+        }
+        return;
+    }
+
+    if (unicode_result == 0) {
+        std.log.warn("unknown virtual key {} (0x{x})", .{ winkey, winkey.vk });
+        return;
+    }
 
     if (unicode_result != 1) std.debug.panic(
         "TODO: handle multiple unicode chars from one key (result={})",

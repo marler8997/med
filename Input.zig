@@ -23,6 +23,98 @@ pub const Action = union(enum) {
     quit,
 };
 
+// placeholders for keys that currently just act as alias's to other keys
+pub const todo = struct {
+    pub const kp_enter = Key.enter;
+    pub const left_shift = null;
+    pub const left_control = Key.control;
+    pub const right_control = Key.control;
+    pub const left_alt = Key.alt;
+    pub const right_alt = Key.alt;
+    pub const pause = null;
+    pub const caps_lock = null;
+
+    pub const kp_page_up = null;
+    pub const kp_page_down = null;
+    pub const kp_end = null;
+    pub const kp_home = null;
+    pub const kp_left = null;
+    pub const kp_up = null;
+    pub const kp_right = null;
+    pub const kp_down = null;
+    pub const print_screen = null;
+    pub const kp_insert = null;
+    pub const kp_delete = null;
+
+    pub const left_super = null;
+    pub const right_super = null;
+
+    pub const kp_0 = null;
+    pub const kp_1 = null;
+    pub const kp_2 = null;
+    pub const kp_3 = null;
+    pub const kp_4 = null;
+    pub const kp_5 = null;
+    pub const kp_6 = null;
+    pub const kp_7 = null;
+    pub const kp_8 = null;
+    pub const kp_9 = null;
+    pub const kp_multiply = null;
+    pub const kp_add = null;
+    pub const kp_separator = null;
+    pub const kp_subtract = null;
+    pub const kp_decimal = null;
+
+    pub const f1 = null;
+    pub const f2 = null;
+    pub const f3 = null;
+    pub const f4 = null;
+    pub const f5 = null;
+    pub const f6 = null;
+    pub const f7 = null;
+    pub const f8 = null;
+    pub const f9 = null;
+    pub const f10 = null;
+    pub const f11 = null;
+    pub const f12 = null;
+    pub const f13 = null;
+    pub const f14 = null;
+    pub const f15 = null;
+    pub const @"f16" = null;
+    pub const f17 = null;
+    pub const f18 = null;
+    pub const f19 = null;
+    pub const f20 = null;
+    pub const f21 = null;
+    pub const f22 = null;
+    pub const f23 = null;
+    pub const f24 = null;
+
+    pub const num_lock = null;
+    pub const scroll_lock = null;
+    pub const right_shift = null;
+
+    pub const mute_volume = null;
+    pub const lower_volume = null;
+    pub const raise_volume = null;
+    pub const media_track_next = null;
+    pub const media_track_previous = null;
+    pub const media_stop = null;
+    pub const media_play_pause = null;
+
+    pub const page_up = null;
+    pub const page_down = null;
+    pub const end = null;
+    pub const home = null;
+    pub const left = null;
+    pub const up = null;
+    pub const right = null;
+    pub const down = null;
+    pub const insert = null;
+    pub const delete = null;
+    pub const kp_divide = null;
+};
+
 pub const Key = enum {
     control,
     alt,
@@ -195,10 +287,11 @@ pub const key_count = @typeInfo(Key).Enum.fields.len;
 pub const KeyPressKind = enum { initial, repeat };
 pub const KeyState = enum { up, down, down_repeat };
 
-pub const KeyMods = packed struct(u1) {
+pub const KeyMods = packed struct(u2) {
     control: bool,
+    alt: bool,
     pub fn eql(self: KeyMods, other: KeyMods) bool {
-        return @as(u1, @bitCast(self)) == @as(u1, @bitCast(other));
+        return @as(u2, @bitCast(self)) == @as(u2, @bitCast(other));
     }
     pub fn format(
         self: KeyMods,
@@ -211,6 +304,10 @@ pub const KeyMods = packed struct(u1) {
         var sep: []const u8 = "";
         if (self.control) {
             try writer.print("{s}control", .{sep});
+            sep = ",";
+        }
+        if (self.alt) {
+            try writer.print("{s}alt", .{sep});
             sep = ",";
         }
     }
