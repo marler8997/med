@@ -53,4 +53,28 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+
+    addTermTest(b, target, optimize, zigwin32_dep);
+}
+
+fn addTermTest(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    win32_dep: *std.Build.Dependency,
+) void {
+    const exe = b.addExecutable(.{
+        .name = "termtest",
+        .root_source_file = b.path("termtest.zig"),
+        .target = target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    exe.root_module.addImport("win32", win32_dep.module("zigwin32"));
+    b.installArtifact(exe);
+    const run = b.addRunArtifact(exe);
+    if (b.args) |args| {
+        run.addArgs(args);
+    }
+    b.step("termtest", "").dependOn(&run.step);
 }
