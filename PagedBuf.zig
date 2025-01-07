@@ -25,9 +25,8 @@ pub fn getReadBuf(self: *PagedBuf) error{OutOfMemory}![]u8 {
         std.debug.assert(self.getCapacity() > self.len);
         return page[0..std.mem.page_size];
     }
-    const available = capacity - self.len;
     std.debug.assert(self.mmu.items.len > 0);
-    return self.mmu.items[self.mmu.items.len - 1][0..available];
+    return self.mmu.items[self.mmu.items.len - 1][self.len % std.mem.page_size .. std.mem.page_size];
 }
 
 pub fn finishRead(self: *PagedBuf, len: usize) void {
