@@ -6,6 +6,8 @@ const Impl = @import("ProcessWin32.zig");
 const Win32Error = @import("Win32Error.zig");
 const platform = @import("platform.zig");
 
+const PagedList = @import("PagedList.zig");
+
 arena_instance: std.heap.ArenaAllocator,
 
 impl: ?Impl = null,
@@ -13,7 +15,8 @@ win32_async_read_stdout: ?Win32AsyncRead = null,
 win32_async_read_stderr: ?Win32AsyncRead = null,
 handles_added: bool = false,
 
-pages: std.DoublyLinkedList(Page) = .{},
+paged_list_stdout: PagedList = .{},
+paged_list_stderr: PagedList = .{},
 
 command: std.ArrayListUnmanaged(u8) = .{},
 command_cursor_pos: usize = 0,
@@ -23,9 +26,9 @@ const Win32AsyncRead = struct {
     overlapped: win32.OVERLAPPED,
 };
 
-const Page = union {
-    raw: [std.mem.page_size]u8,
-};
+fn oom(e: error{OutOfMemory}) noreturn {
+    @panic(@errorName(e));
+}
 
 pub fn deinit(self: *Process) void {
     if (self.handles_added) {
@@ -124,7 +127,12 @@ fn onStdReady(context: *anyopaque, handle: win32.HANDLE, kind: StdoutKind) void 
 
         const data = async_read.buffer[0..read_len];
         std.log.info("got {} bytes from {s}: '{}'", .{ read_len, @tagName(kind), std.zig.fmtEscapes(data) });
-        // TODO: append this data to a buffer
+        const paged_list: *PagedList = switch (kind) {
+            .stdout => &self.paged_list_stdout,
+            .stderr => &self.paged_list_stderr,
+        };
+        paged_list.append(self.arena_instance.allocator(), data) catch |e| oom(e);
+        platform.processModified();
     }
 }
 fn onProcessDied(context: *anyopaque, handle: win32.HANDLE) void {

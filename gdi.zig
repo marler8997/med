@@ -173,7 +173,6 @@ pub fn paint(
             );
         },
         .process => |process| {
-            _ = process;
             const rect = win32.RECT{
                 .left = 0,
                 .top = 0,
@@ -184,11 +183,25 @@ pub fn paint(
 
             _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_void));
             _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
-            const msg = win32.L("TODO: render process output");
-            if (0 == win32.TextOutW(hdc, 0, 0, msg.ptr, @intCast(msg.len))) medwin32.fatalWin32(
-                "TextOut",
-                win32.GetLastError(),
-            );
+
+            if (process.paged_list_stdout.len == 0) {
+                const msg = win32.L("waiting for output...");
+                if (0 == win32.TextOutW(hdc, 0, 0, msg.ptr, @intCast(msg.len))) medwin32.fatalWin32(
+                    "TextOut",
+                    win32.GetLastError(),
+                );
+            } else {
+                const stdout_buf = process.paged_list_stdout.last.?;
+                _ = stdout_buf;
+                {
+                    var buf: [100]u8 = undefined;
+                    const msg = std.fmt.bufPrint(&buf, "TODO: render {} bytes of output", .{process.paged_list_stdout.len}) catch unreachable;
+                    if (0 == win32.TextOutA(hdc, 0, 0, @ptrCast(msg.ptr), @intCast(msg.len))) medwin32.fatalWin32(
+                        "TextOut",
+                        win32.GetLastError(),
+                    );
+                }
+            }
         },
         .file => |view| {
             const viewport_rows = view.getViewportRows(viewport_size.y);
