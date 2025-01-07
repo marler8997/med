@@ -3,6 +3,7 @@ const win32 = @import("win32").everything;
 
 const engine = @import("engine.zig");
 const theme = @import("theme.zig");
+const Process = @import("Process.zig");
 const XY = @import("xy.zig").XY;
 
 const medwin32 = @import("win32.zig");
@@ -172,37 +173,12 @@ pub fn paint(
                 win32.GetLastError(),
             );
         },
-        .process => |process| {
-            const rect = win32.RECT{
-                .left = 0,
-                .top = 0,
-                .right = client_size.x,
-                .bottom = status_y,
-            };
-            _ = win32.FillRect(hdc, &rect, cache.getBrush(.void_bg));
-
-            _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_void));
-            _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
-
-            if (process.paged_list_stdout.len == 0) {
-                const msg = win32.L("waiting for output...");
-                if (0 == win32.TextOutW(hdc, 0, 0, msg.ptr, @intCast(msg.len))) medwin32.fatalWin32(
-                    "TextOut",
-                    win32.GetLastError(),
-                );
-            } else {
-                const stdout_buf = process.paged_list_stdout.last.?;
-                _ = stdout_buf;
-                {
-                    var buf: [100]u8 = undefined;
-                    const msg = std.fmt.bufPrint(&buf, "TODO: render {} bytes of output", .{process.paged_list_stdout.len}) catch unreachable;
-                    if (0 == win32.TextOutA(hdc, 0, 0, @ptrCast(msg.ptr), @intCast(msg.len))) medwin32.fatalWin32(
-                        "TextOut",
-                        win32.GetLastError(),
-                    );
-                }
-            }
-        },
+        .process => |process| renderProcessOutput(hdc, cache, font_size, process, .{
+            .left = 0,
+            .top = 0,
+            .right = client_size.x,
+            .bottom = status_y,
+        }),
         .file => |view| {
             const viewport_rows = view.getViewportRows(viewport_size.y);
 
@@ -327,5 +303,50 @@ pub fn paint(
                 _ = win32.FillRect(hdc, &rect, cache.getBrush(.status_bg));
             }
         }
+    }
+}
+
+fn renderProcessOutput(
+    hdc: win32.HDC,
+    //dpi: u32,
+    //font_face_name: [*:0]const u16,
+    //client_size: XY(i32),
+    cache: *ObjectCache,
+    font_size: XY(i32),
+    process: *const Process,
+    rect: win32.RECT,
+) void {
+    _ = win32.FillRect(hdc, &rect, cache.getBrush(.void_bg));
+
+    _ = win32.SetBkColor(hdc, colorrefFromRgb(theme.bg_void));
+    _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
+
+    if (process.paged_buf_stdout.len == 0) {
+        const msg = win32.L("waiting for output...");
+        if (0 == win32.TextOutW(hdc, 0, 0, msg.ptr, @intCast(msg.len))) medwin32.fatalWin32(
+            "TextOut",
+            win32.GetLastError(),
+        );
+        return;
+    }
+
+    const height_px = rect.bottom - rect.top;
+    const row_count = blk: {
+        const min = @divTrunc(height_px, font_size.y);
+        break :blk min + @as(i32, if (min * font_size.y == height_px) 0 else 1);
+    };
+    var offset: usize = process.paged_buf_stdout.len;
+
+    _ = row_count;
+    _ = &offset;
+    // const stdout_buf = process.paged_buf_stdout.last.?;
+    // _ = stdout_buf;
+    {
+        var buf: [100]u8 = undefined;
+        const msg = std.fmt.bufPrint(&buf, "TODO: render {} bytes of output", .{process.paged_buf_stdout.len}) catch unreachable;
+        if (0 == win32.TextOutA(hdc, 0, 0, @ptrCast(msg.ptr), @intCast(msg.len))) medwin32.fatalWin32(
+            "TextOut",
+            win32.GetLastError(),
+        );
     }
 }

@@ -6,25 +6,20 @@ const Impl = @import("ProcessWin32.zig");
 const Win32Error = @import("Win32Error.zig");
 const platform = @import("platform.zig");
 
-const PagedList = @import("PagedList.zig");
+const PagedBuf = @import("PagedBuf.zig");
 
 arena_instance: std.heap.ArenaAllocator,
 
 impl: ?Impl = null,
-win32_async_read_stdout: ?Win32AsyncRead = null,
-win32_async_read_stderr: ?Win32AsyncRead = null,
+overlapped_stdout: ?win32.OVERLAPPED = null,
+overlapped_stderr: ?win32.OVERLAPPED = null,
 handles_added: bool = false,
 
-paged_list_stdout: PagedList = .{},
-paged_list_stderr: PagedList = .{},
+paged_buf_stdout: PagedBuf = .{},
+paged_buf_stderr: PagedBuf = .{},
 
 command: std.ArrayListUnmanaged(u8) = .{},
 command_cursor_pos: usize = 0,
-
-const Win32AsyncRead = struct {
-    buffer: [std.mem.page_size]u8,
-    overlapped: win32.OVERLAPPED,
-};
 
 fn oom(e: error{OutOfMemory}) noreturn {
     @panic(@errorName(e));
@@ -61,15 +56,12 @@ pub fn start(self: *Process) error{StartProcess}!void {
 
     // issue the initial reads
     for (&[_]StdoutKind{ .stdout, .stderr }) |kind| {
-        const async_read: *?Win32AsyncRead = switch (kind) {
-            .stdout => &self.win32_async_read_stdout,
-            .stderr => &self.win32_async_read_stderr,
+        const overlapped: *?win32.OVERLAPPED = switch (kind) {
+            .stdout => &self.overlapped_stdout,
+            .stderr => &self.overlapped_stderr,
         };
-        if (async_read.* == null) {
-            async_read.* = .{
-                .buffer = undefined,
-                .overlapped = std.mem.zeroes(win32.OVERLAPPED),
-            };
+        if (overlapped.* == null) {
+            overlapped.* = std.mem.zeroes(win32.OVERLAPPED);
             switch (kind) {
                 .stdout => onStdoutReady(self, self.impl.?.stdout.read),
                 .stderr => onStderrReady(self, self.impl.?.stderr.read),
@@ -95,18 +87,22 @@ fn onStdReady(context: *anyopaque, handle: win32.HANDLE, kind: StdoutKind) void 
     const self: *Process = @alignCast(@ptrCast(context));
 
     while (true) {
-        const async_read: *Win32AsyncRead = switch (kind) {
-            .stdout => &self.win32_async_read_stdout.?,
-            .stderr => &self.win32_async_read_stderr.?,
+        const overlapped: *win32.OVERLAPPED = switch (kind) {
+            .stdout => &self.overlapped_stdout.?,
+            .stderr => &self.overlapped_stderr.?,
         };
-        //var win32_err: Win32Error = undefined;
+        const paged_buf: *PagedBuf = switch (kind) {
+            .stdout => &self.paged_buf_stdout,
+            .stderr => &self.paged_buf_stderr,
+        };
+        const read_buf = paged_buf.getReadBuf() catch |e| oom(e);
         var read_len: u32 = undefined;
         if (0 == win32.ReadFile(
             handle,
-            &async_read.buffer,
-            async_read.buffer.len,
+            read_buf.ptr,
+            @intCast(read_buf.len),
             &read_len,
-            &async_read.overlapped,
+            overlapped,
         )) switch (win32.GetLastError()) {
             .ERROR_IO_PENDING => {
                 std.log.info("{s}: io pending", .{@tagName(kind)});
@@ -124,14 +120,11 @@ fn onStdReady(context: *anyopaque, handle: win32.HANDLE, kind: StdoutKind) void 
             else => |e| std.debug.panic("todo: handle error {}", .{e.fmt()}),
             //else => |e| return out_err.set("ReadFile", e),
         };
+        if (read_len == 0) @panic("todo");
 
-        const data = async_read.buffer[0..read_len];
+        const data = read_buf[0..read_len];
         std.log.info("got {} bytes from {s}: '{}'", .{ read_len, @tagName(kind), std.zig.fmtEscapes(data) });
-        const paged_list: *PagedList = switch (kind) {
-            .stdout => &self.paged_list_stdout,
-            .stderr => &self.paged_list_stderr,
-        };
-        paged_list.append(self.arena_instance.allocator(), data) catch |e| oom(e);
+        paged_buf.finishRead(read_len);
         platform.processModified();
     }
 }
