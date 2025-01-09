@@ -412,28 +412,36 @@ fn renderProcessOutput(
 
     const remaining_height: i32 = bottom - rect.top;
     const separator_height = win32.scaleDpi(i32, 1, dpi);
-    const stdout_height: i32 = @divTrunc(remaining_height - separator_height, 2);
-    const separator_top: i32 = rect.top + stdout_height;
-    const stderr_top: i32 = separator_top + separator_height;
-    _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.err));
-    renderStream(hdc, cache, font_size, .{
-        .left = rect.left,
-        .top = stderr_top,
-        .right = rect.right,
-        .bottom = bottom,
-    }, &process.paged_mem_stderr);
-    fillRect(hdc, .{
-        .left = rect.left,
-        .top = separator_top,
-        .right = rect.right,
-        .bottom = stderr_top,
-    }, cache.getBrush(.separator));
+    const stdout_height = if (process.paged_mem_stderr.len == 0)
+        remaining_height
+    else
+        @divTrunc(remaining_height - separator_height, 2);
+    const stdout_bottom = if (process.paged_mem_stderr.len == 0)
+        bottom
+    else
+        rect.top + stdout_height;
+    if (process.paged_mem_stderr.len > 0) {
+        const stderr_top: i32 = stdout_bottom + separator_height;
+        _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.err));
+        renderStream(hdc, cache, font_size, .{
+            .left = rect.left,
+            .top = stderr_top,
+            .right = rect.right,
+            .bottom = bottom,
+        }, &process.paged_mem_stderr);
+        fillRect(hdc, .{
+            .left = rect.left,
+            .top = stdout_bottom,
+            .right = rect.right,
+            .bottom = stderr_top,
+        }, cache.getBrush(.separator));
+    }
     _ = win32.SetTextColor(hdc, colorrefFromRgb(theme.fg));
     renderStream(hdc, cache, font_size, .{
         .left = rect.left,
         .top = rect.top,
         .right = rect.right,
-        .bottom = separator_top,
+        .bottom = stdout_bottom,
     }, &process.paged_mem_stdout);
 }
 
