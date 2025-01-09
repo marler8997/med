@@ -397,8 +397,13 @@ pub fn addHandle(handle: win32.HANDLE, cb: HandleCallback) bool {
     return true;
 }
 pub fn removeHandle(handle: win32.HANDLE) bool {
-    _ = handle;
-    @panic("todo: implement removeHandle");
+    for (global.handles.items, 0..) |existing, index| {
+        if (existing == handle) {
+            _ = global.handles.orderedRemove(index);
+            return true;
+        }
+    }
+    return false;
 }
 
 // ============================================================

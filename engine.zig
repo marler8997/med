@@ -1,6 +1,7 @@
 // The complete interface between the current platform and the editor engine.
 const builtin = @import("builtin");
 const std = @import("std");
+const Error = @import("Error.zig");
 const Input = @import("Input.zig");
 const MappedFile = @import("MappedFile.zig");
 const OnErr = @import("OnErr.zig");
@@ -409,7 +410,10 @@ fn handleAction(action: Input.Action) void {
                     reportErrorFmt("no file open", .{});
                 },
                 .process => |process| {
-                    process.submitInput();
+                    var err: Error = undefined;
+                    if (process.submitInput(&err)) |modified| {
+                        if (modified) platform.processModified();
+                    } else |_| reportErrorFmt("{}", .{err});
                 },
                 .file => |view| {
                     if (view.cursor_pos) |*cursor_pos| {
@@ -623,10 +627,6 @@ fn handleAction(action: Input.Action) void {
             if (global_open_file_prompt) |_| {
                 std.log.err("cannot open process while opening file", .{});
             } else if (global_current_pane != .process) {
-                global_process.start() catch |e| {
-                    reportErrorFmt("start process process failed with {s}", .{@errorName(e)});
-                    return;
-                };
                 global_current_pane = Pane{ .process = &global_process };
                 platform.paneModified();
             }

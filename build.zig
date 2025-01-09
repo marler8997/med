@@ -22,7 +22,12 @@ pub fn build(b: *std.Build) void {
         },
         .target = target,
         .optimize = optimize,
-        .single_threaded = true,
+        .single_threaded = switch (target.result.os.tag) {
+            // we can't be single-threaded on windows because the pseudo-console
+            // api doesn't support overlapped/async io.
+            .windows => false,
+            else => true,
+        },
         .win32_manifest = b.path("res/med.manifest"),
     });
     exe.root_module.addOptions("build_options", build_options);
