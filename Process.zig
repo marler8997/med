@@ -49,7 +49,7 @@ pub fn start(self: *Process) error{StartProcess}!void {
     if (self.impl == null) {
         var win32_err: Win32Error = undefined;
         self.impl = Impl.start(&win32_err) catch {
-            std.log.err("{s} for cmd.exe failed with {}", .{ win32_err.what, win32_err.code.fmt() });
+            std.log.err("{s} for cmd.exe failed, error={}", .{ win32_err.what, win32_err.code });
             return error.StartProcess;
         };
     }
@@ -117,7 +117,7 @@ fn onStdReady(context: *anyopaque, handle: win32.HANDLE, kind: StdoutKind) void 
             .ERROR_NO_DATA => {
                 @panic("todo: nodata");
             },
-            else => |e| std.debug.panic("todo: handle error {}", .{e.fmt()}),
+            else => |e| std.debug.panic("todo: handle error {}", .{e}),
             //else => |e| return out_err.set("ReadFile", e),
         };
         if (read_len == 0) @panic("todo");
@@ -159,7 +159,7 @@ pub fn submitInput(self: *Process) void {
                 @intCast(self.command.items.len),
                 &written,
                 null,
-            )) std.debug.panic("todo: handle WriteFile error {}", .{win32.GetLastError().fmt()});
+            )) std.debug.panic("todo: handle WriteFile error {}", .{win32.GetLastError()});
             if (written != self.command.items.len) std.debug.panic(
                 "todo: handle wrote {} bytes out of {}",
                 .{ written, self.command.items.len },

@@ -66,7 +66,7 @@ pub fn oom(e: error{OutOfMemory}) noreturn {
     std.posix.exit(0xff);
 }
 pub fn fatalWin32(what: []const u8, err: win32.WIN32_ERROR) noreturn {
-    std.debug.panic("{s} failed with {}", .{ what, err.fmt() });
+    std.debug.panic("{s} failed, error={}", .{ what, err });
 }
 pub fn fatal(comptime fmt: []const u8, args: anytype) noreturn {
     std.log.err(fmt, args);
@@ -113,7 +113,7 @@ fn calcWindowPlacement(opt: WindowPlacementOptions) WindowPlacement {
         .{ .x = 0, .y = 0 },
         win32.MONITOR_DEFAULTTOPRIMARY,
     ) orelse {
-        std.log.warn("MonitorFromPoint failed with {}", .{win32.GetLastError().fmt()});
+        std.log.warn("MonitorFromPoint failed, error={}", .{win32.GetLastError()});
         return result;
     };
 
@@ -137,7 +137,7 @@ fn calcWindowPlacement(opt: WindowPlacementOptions) WindowPlacement {
         var info: win32.MONITORINFO = undefined;
         info.cbSize = @sizeOf(win32.MONITORINFO);
         if (0 == win32.GetMonitorInfoW(monitor, &info)) {
-            std.log.warn("GetMonitorInfo failed with {}", .{win32.GetLastError().fmt()});
+            std.log.warn("GetMonitorInfo failed, error={}", .{win32.GetLastError()});
             return result;
         }
         break :blk info.rcWork;

@@ -12,7 +12,7 @@ pub fn build(b: *std.Build) void {
     const build_options = b.addOptions();
     build_options.addOption(bool, "enable_x11_backend", enable_x11_backend);
 
-    const zigwin32_dep = b.dependency("zigwin32", .{});
+    const win32_dep = b.dependency("win32", .{});
 
     const exe = b.addExecutable(.{
         .name = "med",
@@ -34,7 +34,7 @@ pub fn build(b: *std.Build) void {
     if (target.result.os.tag == .windows) {
         exe.subsystem = .Windows;
         exe.mingw_unicode_entry_point = true;
-        exe.root_module.addImport("win32", zigwin32_dep.module("zigwin32"));
+        exe.root_module.addImport("win32", win32_dep.module("win32"));
         const res_inc = b.path("res/inc");
         exe.addIncludePath(res_inc);
         exe.addWin32ResourceFile(.{
@@ -54,7 +54,7 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    addTermTest(b, target, optimize, zigwin32_dep);
+    addTermTest(b, target, optimize, win32_dep);
 }
 
 fn addTermTest(
@@ -70,7 +70,7 @@ fn addTermTest(
         .optimize = optimize,
         .single_threaded = true,
     });
-    exe.root_module.addImport("win32", win32_dep.module("zigwin32"));
+    exe.root_module.addImport("win32", win32_dep.module("win32"));
     b.installArtifact(exe);
     const run = b.addRunArtifact(exe);
     if (b.args) |args| {

@@ -20,8 +20,8 @@ pub fn getTerminalSize(tty: Tty) XY(i32) {
         var info: win32.CONSOLE_SCREEN_BUFFER_INFO = undefined;
         if (0 == win32.GetConsoleScreenBufferInfo(tty.getHandle(), &info)) {
             std.log.err(
-                "GetConsoleScreenBufferInfo on {s} failed with {}",
-                .{ @tagName(tty), win32.GetLastError().fmt() },
+                "GetConsoleScreenBufferInfo on {s} failed, error={}",
+                .{ @tagName(tty), win32.GetLastError() },
             );
             std.process.exit(0xff);
         }
@@ -52,7 +52,7 @@ fn isTty(tty: Tty) bool {
             return true;
         return switch (win32.GetLastError()) {
             .ERROR_INVALID_HANDLE => false,
-            else => |e| std.debug.panic("GetConsoleMode failed with {}", .{e.fmt()}),
+            else => |e| std.debug.panic("GetConsoleMode failed, error={}", .{e}),
         };
     }
     return std.posix.isatty(tty.getHandle());
