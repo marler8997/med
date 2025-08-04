@@ -7,16 +7,14 @@ const PagedMem = @import("pagedmem.zig").PagedMem;
 const Process = @import("Process.zig");
 const XY = @import("xy.zig").XY;
 
-const medwin32 = @import("win32.zig");
-
 pub fn deleteObject(obj: ?win32.HGDIOBJ) void {
-    if (0 == win32.DeleteObject(obj)) medwin32.fatalWin32("DeleteObject", win32.GetLastError());
+    if (0 == win32.DeleteObject(obj)) win32.panicWin32("DeleteObject", win32.GetLastError());
 }
 
 pub fn getClientSize(hwnd: win32.HWND) XY(i32) {
     var rect: win32.RECT = undefined;
     if (0 == win32.GetClientRect(hwnd, &rect))
-        medwin32.fatalWin32("GetClientRect", win32.GetLastError());
+        win32.panicWin32("GetClientRect", win32.GetLastError());
     std.debug.assert(rect.left == 0);
     std.debug.assert(rect.top == 0);
     return .{ .x = rect.right, .y = rect.bottom };
@@ -73,7 +71,7 @@ pub const ObjectCache = struct {
                 .PROOF_QUALITY, // quality
                 .MODERN, // pitch and family
                 face_name,
-            ) orelse medwin32.fatalWin32("CreateFont", win32.GetLastError()),
+            ) orelse win32.panicWin32("CreateFont", win32.GetLastError()),
         };
         return self.font.?.handle;
     }
@@ -98,7 +96,7 @@ pub const ObjectCache = struct {
                 .menu_bg => theme.bg_menu,
                 .separator => theme.separator,
             };
-            brush_ref.* = win32.CreateSolidBrush(colorrefFromRgb(rgb)) orelse medwin32.fatalWin32(
+            brush_ref.* = win32.CreateSolidBrush(colorrefFromRgb(rgb)) orelse win32.panicWin32(
                 "CreateSolidBrush",
                 win32.GetLastError(),
             );
@@ -113,7 +111,7 @@ fn colorrefFromRgb(rgb: theme.Rgb) u32 {
 
 pub fn getFontSize(comptime T: type, dpi: u32, face_name: [*:0]const u16, cache: *ObjectCache) XY(T) {
     const hdc = win32.CreateCompatibleDC(null);
-    defer if (0 == win32.DeleteDC(hdc)) medwin32.fatalWin32("DeleteDC", win32.GetLastError());
+    defer if (0 == win32.DeleteDC(hdc)) win32.panicWin32("DeleteDC", win32.GetLastError());
 
     const font = cache.getFont(dpi, face_name);
 
@@ -121,7 +119,7 @@ pub fn getFontSize(comptime T: type, dpi: u32, face_name: [*:0]const u16, cache:
     defer _ = win32.SelectObject(hdc, old_font);
 
     var metrics: win32.TEXTMETRICW = undefined;
-    if (0 == win32.GetTextMetricsW(hdc, &metrics)) medwin32.fatalWin32(
+    if (0 == win32.GetTextMetricsW(hdc, &metrics)) win32.panicWin32(
         "GetTextMetrics",
         win32.GetLastError(),
     );
@@ -159,7 +157,7 @@ pub fn paint(
 
     switch (engine.global_current_pane) {
         .welcome => {
-            fillRect(hdc, .{
+            win32.fillRect(hdc, .{
                 .left = 0,
                 .top = 0,
                 .right = client_size.x,
@@ -171,7 +169,7 @@ pub fn paint(
             const msg = win32.L("Welcome");
             const x = @divTrunc(client_size.x - (font_size.x * @as(i32, msg.len)), 2);
             const y = @divTrunc(client_size.y - font_size.y, 2);
-            if (0 == win32.TextOutW(hdc, x, y, msg.ptr, @intCast(msg.len))) medwin32.fatalWin32(
+            if (0 == win32.TextOutW(hdc, x, y, msg.ptr, @intCast(msg.len))) win32.panicWin32(
                 "TextOut",
                 win32.GetLastError(),
             );
@@ -192,7 +190,7 @@ pub fn paint(
                 const y: i32 = @intCast(row_index * font_size.y);
                 const row_str = row.getViewport(view.*, viewport_size.x);
                 // NOTE: for now we only support ASCII
-                if (0 == win32.TextOutA(hdc, 0, y, @ptrCast(row_str), @intCast(row_str.len))) medwin32.fatalWin32(
+                if (0 == win32.TextOutA(hdc, 0, y, @ptrCast(row_str), @intCast(row_str.len))) win32.panicWin32(
                     "TextOut",
                     win32.GetLastError(),
                 );
@@ -200,7 +198,7 @@ pub fn paint(
                 {
                     const end_of_line_x: usize = row_str.len * @as(usize, @intCast(font_size.x));
                     if (end_of_line_x < client_size.x) {
-                        fillRect(hdc, .{
+                        win32.fillRect(hdc, .{
                             .left = @intCast(end_of_line_x),
                             .top = y,
                             .right = client_size.x,
@@ -213,7 +211,7 @@ pub fn paint(
             {
                 const end_of_file_y: usize = viewport_rows.len * @as(usize, @intCast(font_size.y));
                 if (end_of_file_y < status_y) {
-                    fillRect(hdc, .{
+                    win32.fillRect(hdc, .{
                         .left = 0,
                         .top = @intCast(end_of_file_y),
                         .right = client_size.x,
@@ -245,7 +243,7 @@ pub fn paint(
     }
 
     if (engine.global_open_file_prompt) |*prompt| {
-        fillRect(hdc, .{
+        win32.fillRect(hdc, .{
             .left = 0,
             .top = 0,
             .right = client_size.x,
@@ -259,7 +257,7 @@ pub fn paint(
         _ = win32.TextOutA(hdc, 0, 1 * font_size.y, @ptrCast(path.ptr), @intCast(path.len));
     }
     if (engine.global_err_msg) |err_msg| {
-        fillRect(hdc, .{
+        win32.fillRect(hdc, .{
             .left = 0,
             .top = 0,
             .right = client_size.x,
@@ -288,12 +286,12 @@ pub fn paint(
             status_y,
             @ptrCast(text.ptr), // todo: win32 api shouldn't require null terminator
             @intCast(text.len),
-        )) medwin32.fatalWin32("TextOut", win32.GetLastError());
+        )) win32.panicWin32("TextOut", win32.GetLastError());
 
         {
             const end_of_line_x: usize = @as(usize, text.len) * @as(usize, @intCast(font_size.x));
             if (end_of_line_x < client_size.x) {
-                fillRect(hdc, .{
+                win32.fillRect(hdc, .{
                     .left = @intCast(end_of_line_x),
                     .top = status_y,
                     .right = client_size.x,
@@ -400,7 +398,7 @@ fn renderProcessOutput(
             .top = top,
             .right = rect.right,
         });
-        if (text_right < rect.right) fillRect(hdc, .{
+        if (text_right < rect.right) win32.fillRect(hdc, .{
             .left = text_right,
             .top = top,
             .right = rect.right,
@@ -422,7 +420,7 @@ fn renderProcessOutput(
         .right = rect.right,
         .bottom = bottom,
     }, &process.paged_mem_stderr);
-    fillRect(hdc, .{
+    win32.fillRect(hdc, .{
         .left = rect.left,
         .top = separator_top,
         .right = rect.right,
@@ -445,7 +443,7 @@ fn renderStream(
     paged_mem: *const PagedMem(std.heap.page_size_min),
 ) void {
     if (paged_mem.len == 0) {
-        fillRect(hdc, rect, cache.getBrush(.void_bg));
+        win32.fillRect(hdc, rect, cache.getBrush(.void_bg));
         // TODO: should we render a "no output" message or something?
         return;
     }
@@ -465,7 +463,7 @@ fn renderStream(
             .top = top,
             .right = rect.right,
         });
-        if (text_right < rect.right) fillRect(hdc, .{
+        if (text_right < rect.right) win32.fillRect(hdc, .{
             .left = text_right,
             .top = top,
             .right = rect.right,
@@ -477,7 +475,7 @@ fn renderStream(
         line_end = line_start - 1;
     }
     if (bottom > rect.top) {
-        fillRect(hdc, .{
+        win32.fillRect(hdc, .{
             .left = rect.left,
             .right = rect.right,
             .top = rect.top,
@@ -500,17 +498,11 @@ fn drawText(
     while (left < box.right) {
         const char = text_iterator.next() orelse break;
         const str = [_:0]u16{char};
-        if (0 == win32.TextOutW(hdc, left, box.top, &str, 1)) medwin32.fatalWin32(
+        if (0 == win32.TextOutW(hdc, left, box.top, &str, 1)) win32.panicWin32(
             "TextOut",
             win32.GetLastError(),
         );
         left += font_size.x;
     }
     return left;
-}
-fn fillRect(hdc: win32.HDC, rect: win32.RECT, brush: win32.HBRUSH) void {
-    if (0 == win32.FillRect(hdc, &rect, brush)) medwin32.fatalWin32(
-        "FillRect",
-        win32.GetLastError(),
-    );
 }
