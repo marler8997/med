@@ -17,8 +17,8 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "med",
         .root_source_file = switch (target.result.os.tag) {
-            .windows => b.path("win32.zig"),
-            else => b.path("posix.zig"),
+            .windows => b.path("src/win32.zig"),
+            else => b.path("src/posix.zig"),
         },
         .target = target,
         .optimize = optimize,
@@ -65,7 +65,7 @@ fn addTermTest(
 ) void {
     const exe = b.addExecutable(.{
         .name = "termtest",
-        .root_source_file = b.path("termtest.zig"),
+        .root_source_file = b.path("src/termtest.zig"),
         .target = target,
         .optimize = optimize,
         .single_threaded = true,
