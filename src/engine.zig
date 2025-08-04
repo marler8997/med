@@ -4,9 +4,8 @@ const std = @import("std");
 const Input = @import("Input.zig");
 const MappedFile = @import("MappedFile.zig");
 const OnErr = @import("OnErr.zig");
-const platform = @import("platform.zig");
+const hook = @import("hook.zig");
 const RefString = @import("RefString.zig");
-const oom = platform.oom;
 const Process = @import("Process.zig");
 const View = @import("View.zig");
 const XY = @import("xy.zig").XY;
@@ -135,7 +134,7 @@ const Dialog = struct {
             .add_char => |c| {
                 const s = [_]u8{c};
                 self.append(&s);
-                platform.dialogModified();
+                hook.dialogModified();
             }, // ignore
             .enter => {
                 const answer = self.getAnswer();
@@ -150,7 +149,7 @@ const Dialog = struct {
                         } else {
                             self.* = init(.unsaved_changes_confirm_kill);
                         }
-                        platform.dialogModified();
+                        hook.dialogModified();
                     },
                 }
             },
@@ -159,7 +158,7 @@ const Dialog = struct {
                     .unsaved_changes_confirm_kill => {
                         self.* = undefined;
                         global_dialog = null;
-                        platform.dialogModified();
+                        hook.dialogModified();
                     },
                 }
             },
@@ -175,7 +174,7 @@ const Dialog = struct {
             .backspace => {
                 if (self.text_len > self.kind.textPrefix().len) {
                     self.text_len -= 1;
-                    platform.dialogModified();
+                    hook.dialogModified();
                 }
             }, // ignore
             .kill_line => {
@@ -185,7 +184,7 @@ const Dialog = struct {
             .save_file => {}, // ignore
             .@"open-process" => {}, // ignore
             .kill_pane => {}, // ignore
-            .quit => platform.quit(),
+            .quit => hook.quit(),
         }
     }
 };
@@ -257,7 +256,7 @@ pub fn setGlobalStatus(new_status: []const u8, opt: struct {
         @memcpy(global_status.buf[0..new_status.len], new_status);
         global_status.len = @intCast(new_status.len);
     }
-    platform.statusModified();
+    hook.statusModified();
 }
 
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -271,7 +270,7 @@ fn setGlobalError(new_err: RefString) void {
     }
     global_err_msg = new_err;
     new_err.addRef();
-    platform.errModified();
+    hook.errModified();
 }
 var to_global_err_instance = struct {
     base: OnErr = .{ .on_err = on_err },
@@ -294,7 +293,7 @@ fn handleAction(action: Input.Action) void {
             .enter, .@"keyboard-quit" => {
                 err_msg.unref();
                 global_err_msg = null;
-                platform.errModified();
+                hook.errModified();
             },
             .cursor_back,
             .cursor_forward,
@@ -311,7 +310,7 @@ fn handleAction(action: Input.Action) void {
             .save_file => {}, // ignore
             .@"open-process" => {}, // ignore
             .kill_pane => {}, // ignore
-            .quit => platform.quit(),
+            .quit => hook.quit(),
         }
         return;
     }
@@ -326,14 +325,14 @@ fn handleAction(action: Input.Action) void {
                 }
                 prompt.path_buf[prompt.path_len] = ascii_code;
                 prompt.path_len += 1;
-                platform.viewModified();
+                hook.viewModified();
                 return;
             }
 
             switch (global_current_pane) {
                 .welcome => {
                     // TODO: should we just create a file view?
-                    platform.beep();
+                    hook.beep();
                     reportErrorFmt("no file open", .{});
                 },
                 .process => |process| {
@@ -385,7 +384,7 @@ fn handleAction(action: Input.Action) void {
                         std.log.info("setting row {} col {} to '{c}'", .{ cursor_pos.y, cursor_pos.x, ascii_code });
                         al.items[cursor_pos.x] = ascii_code;
                         cursor_pos.x += 1;
-                        platform.viewModified();
+                        hook.viewModified();
                     }
                 },
             }
@@ -398,14 +397,14 @@ fn handleAction(action: Input.Action) void {
                     error.Reported => {},
                 };
                 global_open_file_prompt = null;
-                platform.viewModified();
+                hook.viewModified();
                 return;
             }
 
             switch (global_current_pane) {
                 .welcome => {
                     // TODO: should we just create a file view?
-                    platform.beep();
+                    hook.beep();
                     reportErrorFmt("no file open", .{});
                 },
                 .process => |process| {
@@ -440,7 +439,7 @@ fn handleAction(action: Input.Action) void {
                             .x = 0, // TODO: should we try to autodetect tabbing here?
                             .y = cursor_pos.y + 1,
                         };
-                        platform.viewModified();
+                        hook.viewModified();
                         return;
                     }
                     std.log.warn("TODO: handle enter with no cursor?", .{});
@@ -450,7 +449,7 @@ fn handleAction(action: Input.Action) void {
         .@"keyboard-quit" => {
             if (global_open_file_prompt) |_| {
                 global_open_file_prompt = null;
-                platform.viewModified();
+                hook.viewModified();
             } else switch (global_current_pane) {
                 .welcome => {},
                 .process => {},
@@ -464,11 +463,11 @@ fn handleAction(action: Input.Action) void {
             } else switch (global_current_pane) {
                 .welcome => {},
                 .process => |process| if (process.@"cursor-back"()) {
-                    platform.processModified();
+                    hook.processModified();
                 },
                 .file => |view| {
                     if (view.cursorBack()) {
-                        platform.viewModified();
+                        hook.viewModified();
                     }
                 },
             }
@@ -480,11 +479,11 @@ fn handleAction(action: Input.Action) void {
             } else switch (global_current_pane) {
                 .welcome => {},
                 .process => |process| if (process.@"cursor-forward"()) {
-                    platform.processModified();
+                    hook.processModified();
                 },
                 .file => |view| {
                     if (view.cursorForward()) {
-                        platform.viewModified();
+                        hook.viewModified();
                     }
                 },
             }
@@ -498,7 +497,7 @@ fn handleAction(action: Input.Action) void {
                 .process => {},
                 .file => |view| {
                     if (view.cursorUp()) {
-                        platform.viewModified();
+                        hook.viewModified();
                     }
                 },
             }
@@ -512,7 +511,7 @@ fn handleAction(action: Input.Action) void {
                 .process => {},
                 .file => |view| {
                     if (view.cursorDown()) {
-                        platform.viewModified();
+                        hook.viewModified();
                     }
                 },
             }
@@ -524,11 +523,11 @@ fn handleAction(action: Input.Action) void {
             } else switch (global_current_pane) {
                 .welcome => {},
                 .process => |process| if (process.@"cursor-line-start"()) {
-                    platform.processModified();
+                    hook.processModified();
                 },
                 .file => |view| {
                     if (view.cursorLineStart()) {
-                        platform.viewModified();
+                        hook.viewModified();
                     }
                 },
             }
@@ -540,11 +539,11 @@ fn handleAction(action: Input.Action) void {
             } else switch (global_current_pane) {
                 .welcome => {},
                 .process => |process| if (process.@"cursor-line-end"()) {
-                    platform.processModified();
+                    hook.processModified();
                 },
                 .file => |view| {
                     if (view.cursorLineEnd()) {
-                        platform.viewModified();
+                        hook.viewModified();
                     }
                 },
             }
@@ -555,7 +554,7 @@ fn handleAction(action: Input.Action) void {
             } else switch (global_current_pane) {
                 .welcome => {},
                 .process => |process| if (process.tab()) {
-                    platform.processModified();
+                    hook.processModified();
                 },
                 .file => |view| {
                     _ = view;
@@ -567,11 +566,11 @@ fn handleAction(action: Input.Action) void {
             switch (global_current_pane) {
                 .welcome => {},
                 .process => |process| if (process.delete()) {
-                    platform.processModified();
+                    hook.processModified();
                 },
                 .file => |view| {
                     if (view.delete(.not_from_backspace) catch |e| oom(e)) {
-                        platform.viewModified();
+                        hook.viewModified();
                     }
                 },
             }
@@ -582,12 +581,12 @@ fn handleAction(action: Input.Action) void {
             } else switch (global_current_pane) {
                 .welcome => {},
                 .process => |process| if (process.backspace()) {
-                    platform.processModified();
+                    hook.processModified();
                 },
                 .file => |view| {
                     if (view.cursorBack()) {
                         _ = view.delete(.from_backspace) catch |e| oom(e);
-                        platform.viewModified();
+                        hook.viewModified();
                     }
                 },
             }
@@ -598,11 +597,11 @@ fn handleAction(action: Input.Action) void {
             } else switch (global_current_pane) {
                 .welcome => {},
                 .process => |process| if (process.backspace()) {
-                    platform.processModified();
+                    hook.processModified();
                 },
                 .file => |view| {
                     if (view.killLine()) {
-                        platform.viewModified();
+                        hook.viewModified();
                     }
                 },
             }
@@ -615,7 +614,7 @@ fn handleAction(action: Input.Action) void {
                 if (path.len + 1 >= prompt.path_buf.len) @panic("handle long cwd");
                 prompt.path_buf[path.len] = std.fs.path.sep;
                 prompt.path_len = path.len + 1;
-                platform.viewModified();
+                hook.viewModified();
             }
         },
         .save_file => saveFile(),
@@ -628,11 +627,11 @@ fn handleAction(action: Input.Action) void {
                     return;
                 };
                 global_current_pane = Pane{ .process = &global_process };
-                platform.paneModified();
+                hook.paneModified();
             }
         },
         .kill_pane => @"kill-pane"(.{ .prompt_unsaved_changes = true }),
-        .quit => platform.quit(),
+        .quit => hook.quit(),
     }
 }
 
@@ -667,19 +666,19 @@ fn @"open-file"(filename: RefString) error{Reported}!void {
 
 fn saveFile() void {
     if (global_open_file_prompt != null) {
-        platform.beep();
+        hook.beep();
         std.log.err("cannot save-file while opening file", .{});
         return;
     }
 
     const view = switch (global_current_pane) {
         .welcome => {
-            platform.beep();
+            hook.beep();
             std.log.err("no file to save", .{});
             return;
         },
         .process => {
-            platform.beep();
+            hook.beep();
             reportErrorFmt("save-file for process not implemented", .{});
             return;
         },
@@ -690,7 +689,7 @@ fn saveFile() void {
         var normalized = false;
         const has_changes = view.hasChanges(&normalized);
         if (normalized) {
-            platform.viewModified();
+            hook.viewModified();
         }
         if (!has_changes) {
             std.log.info("no changes to save", .{});
@@ -710,20 +709,20 @@ fn saveFile() void {
     ) catch |err| switch (err) {
         error.NoSpaceLeft => {
             setGlobalError(RefString.allocDupe("saveToDisk error: file path too long") catch |e| oom(e));
-            platform.errModified();
+            hook.errModified();
             return;
         },
     };
 
     if (writeViewToFile(tmp_filename, view)) |err| {
         setGlobalError(err);
-        platform.errModified();
+        hook.errModified();
         return;
     }
 
     std.fs.cwd().rename(tmp_filename, file.name.slice) catch |err| {
         setGlobalError(RefString.allocFmt("rename tmp file failed with {s}", .{@errorName(err)}) catch |e| oom(e));
-        platform.errModified();
+        hook.errModified();
         return;
     };
 
@@ -736,7 +735,7 @@ fn saveFile() void {
 
     view.deinit();
     view.* = View.init();
-    platform.viewModified();
+    hook.viewModified();
 
     @"open-file"(save_filename) catch |err| switch (err) {
         error.Reported => return,
@@ -763,7 +762,7 @@ fn @"kill-pane"(opt: struct { prompt_unsaved_changes: bool }) void {
     // global_dialog = .{
     //     .kind = .@"kill-pane",
     // };
-    // platform.viewModified();
+    // hook.viewModified();
 
     switch (global_current_pane) {
         .welcome => {
@@ -779,7 +778,7 @@ fn @"kill-pane"(opt: struct { prompt_unsaved_changes: bool }) void {
                 var normalized = false;
                 const has_changes = view.hasChanges(&normalized);
                 if (normalized) {
-                    platform.viewModified();
+                    hook.viewModified();
                 }
                 if (has_changes) {
                     if (global_dialog) |_| {
@@ -787,13 +786,13 @@ fn @"kill-pane"(opt: struct { prompt_unsaved_changes: bool }) void {
                         return;
                     }
                     global_dialog = Dialog.init(.unsaved_changes_confirm_kill);
-                    platform.viewModified();
+                    hook.viewModified();
                     return;
                 }
             }
             view.deinit();
             global_current_pane = .welcome;
-            platform.paneModified();
+            hook.paneModified();
         },
     }
 }
@@ -851,4 +850,8 @@ fn arrayListUnmanagedShiftRight(
     const old_len = al.items.len;
     al.items.len += amount;
     std.mem.copyBackwards(T, al.items[start + amount ..], al.items[start..old_len]);
+}
+
+fn oom(e: error{OutOfMemory}) noreturn {
+    @panic(@errorName(e));
 }

@@ -2,10 +2,7 @@ const MappedFile = @This();
 
 const builtin = @import("builtin");
 const std = @import("std");
-const win32 = struct {
-    usingnamespace @import("win32").foundation;
-    usingnamespace @import("win32").system.memory;
-};
+const win32 = @import("zin").platform.win32;
 const OnErr = @import("OnErr.zig");
 
 mem: []align(std.heap.page_size_min) u8,

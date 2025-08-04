@@ -1,5 +1,6 @@
 const std = @import("std");
-const win32 = @import("win32").everything;
+const win32 = @import("zin").platform.win32;
+const zin = @import("zin");
 
 const engine = @import("engine.zig");
 const theme = @import("theme.zig");
@@ -11,7 +12,7 @@ pub fn deleteObject(obj: ?win32.HGDIOBJ) void {
     if (0 == win32.DeleteObject(obj)) win32.panicWin32("DeleteObject", win32.GetLastError());
 }
 
-pub fn getClientSize(hwnd: win32.HWND) XY(i32) {
+pub fn getClientSize(hwnd: win32.HWND) zin.XY {
     var rect: win32.RECT = undefined;
     if (0 == win32.GetClientRect(hwnd, &rect))
         win32.panicWin32("GetClientRect", win32.GetLastError());
@@ -109,7 +110,7 @@ fn colorrefFromRgb(rgb: theme.Rgb) u32 {
     return (@as(u32, rgb.r) << 0) | (@as(u32, rgb.g) << 8) | (@as(u32, rgb.b) << 16);
 }
 
-pub fn getFontSize(comptime T: type, dpi: u32, face_name: [*:0]const u16, cache: *ObjectCache) XY(T) {
+pub fn getFontSize(comptime T: type, dpi: u32, face_name: [*:0]const u16, cache: *ObjectCache) if (T == i32) zin.XY else XY(T) {
     const hdc = win32.CreateCompatibleDC(null);
     defer if (0 == win32.DeleteDC(hdc)) win32.panicWin32("DeleteDC", win32.GetLastError());
 
@@ -138,7 +139,7 @@ pub fn paint(
     hdc: win32.HDC,
     dpi: u32,
     font_face_name: [*:0]const u16,
-    client_size: XY(i32),
+    client_size: zin.XY,
     cache: *ObjectCache,
 ) void {
     const font_size = getFontSize(i32, dpi, font_face_name, cache);
@@ -223,7 +224,7 @@ pub fn paint(
             // draw cursor
             if (view.cursor_pos) |cursor_global_pos| {
                 if (view.toViewportPos(viewport_size, cursor_global_pos)) |cursor_viewport_pos| {
-                    const viewport_pos = XY(i32){
+                    const viewport_pos = zin.XY{
                         .x = @intCast(cursor_viewport_pos.x * font_size.x),
                         .y = @intCast(cursor_viewport_pos.y * font_size.y),
                     };
@@ -379,7 +380,7 @@ fn renderProcessOutput(
     hdc: win32.HDC,
     cache: *ObjectCache,
     dpi: u32,
-    font_size: XY(i32),
+    font_size: zin.XY,
     process: *const Process,
     rect: win32.RECT,
 ) void {
@@ -438,7 +439,7 @@ fn renderProcessOutput(
 fn renderStream(
     hdc: win32.HDC,
     cache: *ObjectCache,
-    font_size: XY(i32),
+    font_size: zin.XY,
     rect: win32.RECT,
     paged_mem: *const PagedMem(std.heap.page_size_min),
 ) void {
@@ -486,7 +487,7 @@ fn renderStream(
 
 fn drawText(
     hdc: win32.HDC,
-    font_size: XY(i32),
+    font_size: zin.XY,
     text_iterator: anytype,
     box: struct {
         left: i32,

@@ -1,6 +1,6 @@
 const Win32Error = @This();
 
-const win32 = @import("win32").everything;
+const win32 = @import("zin").platform.win32;
 
 what: [:0]const u8,
 code: win32.WIN32_ERROR,
