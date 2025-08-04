@@ -351,23 +351,24 @@ pub fn quit() void {
 }
 
 threadlocal var thread_is_panicing = false;
-pub fn panic(
-    msg: []const u8,
-    error_return_trace: ?*std.builtin.StackTrace,
-    ret_addr: ?usize,
-) noreturn {
-    if (!thread_is_panicing) {
-        thread_is_panicing = true;
-        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        const msg_z: [:0]const u8 = if (std.fmt.allocPrintZ(
-            arena.allocator(),
-            "{s}",
-            .{msg},
-        )) |msg_z| msg_z else |_| "failed allocate error message";
-        _ = win32.MessageBoxA(null, msg_z, "WinTerm Panic!", .{ .ICONASTERISK = 1 });
+pub const panic = std.debug.FullPanic(struct {
+    pub fn panic(
+        msg: []const u8,
+        ret_addr: ?usize,
+    ) noreturn {
+        if (!thread_is_panicing) {
+            thread_is_panicing = true;
+            var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+            const msg_z: [:0]const u8 = if (std.fmt.allocPrintZ(
+                arena.allocator(),
+                "{s}",
+                .{msg},
+            )) |msg_z| msg_z else |_| "failed allocate error message";
+            _ = win32.MessageBoxA(null, msg_z, "Med Panic!", .{ .ICONASTERISK = 1 });
+        }
+        std.debug.defaultPanic(msg, ret_addr);
     }
-    std.builtin.default_panic(msg, error_return_trace, ret_addr);
-}
+}.panic);
 
 // NOTE: for now we'll just repaint the whole window
 //       no matter what is modified

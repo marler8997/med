@@ -1,16 +1,17 @@
 .{
-    .name = "med",
+    .name = .med,
+    .fingerprint = 0xed1bbbc2e86cd7db,
     .version = "0.0.1",
-    .minimum_zig_version = "0.13.0",
+    .minimum_zig_version = "0.14.1",
 
     .dependencies = .{
-        .zigx = .{
-            .url = "https://github.com/marler8997/zigx/archive/f09fd6fa5d593c759c0d9d35db4dfb5a150d366a.tar.gz",
-            .hash = "122026f249798ac9b3ab3561b94d8460aaf1fb3487a5cb7c021387db1136cf08936d",
+        .x11 = .{
+            .url = "git+https://github.com/marler8997/zigx#718f531913acb921a25951a3d47e03c7f468636c",
+            .hash = "x11-0.0.0-yWuw5lYgCQDLrPM8H0EuX6LzCby8clB1viSyvT6k-hWs",
         },
         .win32 = .{
-            .url = "git+https://github.com/marlersoft/zigwin32#e8739b32a33ce48a3286aba31918b26a9dfc6ef0",
-            .hash = "1220219ca4acfa5804ca39945f92554e93507b077c03605b7a4c1c0401f0c7121339",
+            .url = "git+https://github.com/marlersoft/zigwin32#d21b419d808215e1f82605fdaddc49750bfa3bca",
+            .hash = "zigwin32-25.0.28-preview-AAAAAI0J-wP-8_KKo4Yjr33XLhVhlJmeagGUedByaOnX",
         },
     },
     .paths = .{

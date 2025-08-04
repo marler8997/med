@@ -8,13 +8,13 @@ const win32 = struct {
 };
 const OnErr = @import("OnErr.zig");
 
-mem: []align(std.mem.page_size) u8,
+mem: []align(std.heap.page_size_min) u8,
 mapping: if (builtin.os.tag == .windows) win32.HANDLE else void,
 
 pub const Options = struct {
     mode: enum { read_only, read_write } = .read_only,
 };
-const empty_mem: [0]u8 align(std.mem.page_size) = undefined;
+const empty_mem: [0]u8 align(std.heap.page_size_min) = undefined;
 
 pub fn init(
     filename: []const u8,
@@ -66,7 +66,7 @@ pub fn init(
 
         return .{
             .mapping = mapping,
-            .mem = @as([*]align(std.mem.page_size) u8, @alignCast(@ptrCast(ptr)))[0..file_size],
+            .mem = @as([*]align(std.heap.page_size_min) u8, @alignCast(@ptrCast(ptr)))[0..file_size],
         };
     }
 

@@ -49,7 +49,7 @@ pub const ObjectCache = struct {
                 return font.handle;
             std.log.info(
                 "deleting old font '{}' for dpi {}",
-                .{ std.unicode.fmtUtf16le(std.mem.span(font.face_name)), font.dpi },
+                .{ std.unicode.fmtUtf16Le(std.mem.span(font.face_name)), font.dpi },
             );
             deleteObject(font.handle);
             self.font = null;
@@ -353,7 +353,7 @@ const Utf8TextIterator = struct {
     }
 };
 const PagedMemTextIterator = struct {
-    paged_mem: *const PagedMem(std.mem.page_size),
+    paged_mem: *const PagedMem(std.heap.page_size_min),
     offset: usize,
     line_end: usize,
     pub fn next(self: *PagedMemTextIterator) ?u16 {
@@ -442,7 +442,7 @@ fn renderStream(
     cache: *ObjectCache,
     font_size: XY(i32),
     rect: win32.RECT,
-    paged_mem: *const PagedMem(std.mem.page_size),
+    paged_mem: *const PagedMem(std.heap.page_size_min),
 ) void {
     if (paged_mem.len == 0) {
         fillRect(hdc, rect, cache.getBrush(.void_bg));

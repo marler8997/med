@@ -15,8 +15,8 @@ overlapped_stdout: ?win32.OVERLAPPED = null,
 overlapped_stderr: ?win32.OVERLAPPED = null,
 handles_added: bool = false,
 
-paged_mem_stdout: PagedMem(std.mem.page_size) = .{},
-paged_mem_stderr: PagedMem(std.mem.page_size) = .{},
+paged_mem_stdout: PagedMem(std.heap.page_size_min) = .{},
+paged_mem_stderr: PagedMem(std.heap.page_size_min) = .{},
 
 command: std.ArrayListUnmanaged(u8) = .{},
 command_cursor_pos: usize = 0,
@@ -91,7 +91,7 @@ fn onStdReady(context: *anyopaque, handle: win32.HANDLE, kind: StdoutKind) void 
             .stdout => &self.overlapped_stdout.?,
             .stderr => &self.overlapped_stderr.?,
         };
-        const paged_mem: *PagedMem(std.mem.page_size) = switch (kind) {
+        const paged_mem: *PagedMem(std.heap.page_size_min) = switch (kind) {
             .stdout => &self.paged_mem_stdout,
             .stderr => &self.paged_mem_stderr,
         };

@@ -650,7 +650,7 @@ fn @"open-file"(filename: RefString) error{Reported}!void {
     global_file = View.init();
 
     {
-        var line_it = std.mem.split(u8, mapped_file.mem, "\n");
+        var line_it = std.mem.splitScalar(u8, mapped_file.mem, '\n');
         while (line_it.next()) |line| {
             const offset = @intFromPtr(line.ptr) - @intFromPtr(mapped_file.mem.ptr);
             global_file.rows.append(global_file.arena(), .{ .file_backed = .{
@@ -702,7 +702,7 @@ fn saveFile() void {
         "Not Implemented: saveToDisk for a view without a file",
     ) catch |e| oom(e));
 
-    var path_buf: [std.fs.MAX_PATH_BYTES + 1]u8 = undefined;
+    var path_buf: [std.fs.max_path_bytes + 1]u8 = undefined;
     const tmp_filename = std.fmt.bufPrint(
         &path_buf,
         "{s}.med-saving",

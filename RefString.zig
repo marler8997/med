@@ -73,7 +73,7 @@ pub fn unref(self: RefString) void {
         refstring.debug("unref {*} free", .{self.slice});
         global_gpa.rawFree(
             self.getAllocatorSlice(),
-            std.math.log2(@alignOf(Metadata)),
+            @enumFromInt(std.math.log2(@alignOf(Metadata))),
             @returnAddress(),
         );
     } else {

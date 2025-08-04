@@ -75,7 +75,7 @@ pub fn connectSetup(
 }
 
 fn connectSetupAuth(
-    display_num: ?u32,
+    display_num: ?x.DisplayNum,
     sock: std.posix.socket_t,
     auth_filename: []const u8,
 ) !?u16 {

@@ -28,8 +28,8 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addOptions("build_options", build_options);
 
     if (enable_x11_backend) {
-        const zigx_dep = b.dependency("zigx", .{});
-        exe.root_module.addImport("x", zigx_dep.module("zigx"));
+        const zigx_dep = b.dependency("x11", .{});
+        exe.root_module.addImport("x", zigx_dep.module("x11"));
     }
     if (target.result.os.tag == .windows) {
         exe.subsystem = .Windows;

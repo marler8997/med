@@ -12,21 +12,21 @@ const XY = @import("xy.zig").XY;
 const Endian = std.builtin.Endian;
 
 pub const Ids = struct {
-    base: u32,
-    pub fn window(self: Ids) u32 {
-        return self.base;
+    base: x.ResourceBase,
+    pub fn window(self: Ids) x.Window {
+        return self.base.add(0).window();
     }
-    pub fn gc_bg_fg(self: Ids) u32 {
-        return self.base + 1;
+    pub fn gc_bg_fg(self: Ids) x.GraphicsContext {
+        return self.base.add(1).graphicsContext();
     }
-    pub fn gc_cursor_fg(self: Ids) u32 {
-        return self.base + 2;
+    pub fn gc_cursor_fg(self: Ids) x.GraphicsContext {
+        return self.base.add(2).graphicsContext();
     }
-    pub fn gc_bg_menu_fg(self: Ids) u32 {
-        return self.base + 3;
+    pub fn gc_bg_menu_fg(self: Ids) x.GraphicsContext {
+        return self.base.add(3).graphicsContext();
     }
-    pub fn gc_bg_menu_err(self: Ids) u32 {
-        return self.base + 4;
+    pub fn gc_bg_menu_err(self: Ids) x.GraphicsContext {
+        return self.base.add(4).graphicsContext();
     }
 };
 
@@ -194,8 +194,13 @@ pub fn go() !void {
     global.sock = conn.sock;
 
     const fixed = conn.setup.fixed();
-    inline for (@typeInfo(@TypeOf(fixed.*)).Struct.fields) |field| {
-        std.log.debug("{s}: {any}", .{ field.name, @field(fixed, field.name) });
+    inline for (@typeInfo(@TypeOf(fixed.*)).@"struct".fields) |field| {
+        switch (field.type) {
+            u8, u16, u32 => std.log.debug("{s}: {any}", .{ field.name, @field(fixed, field.name) }),
+            x.ResourceBase => std.log.debug("{s}: {d}", .{ field.name, @intFromEnum(@field(fixed, field.name)) }),
+            x.NonExhaustive(x.ImageByteOrder) => std.log.debug("{s}: {s}", .{ field.name, @tagName(@field(fixed, field.name)) }),
+            else => @compileError("log connect setup type '" ++ @typeName(field.type) ++ "' is not implemented"),
+        }
     }
     global.ids = Ids{ .base = conn.setup.fixed().resource_id_base };
     std.log.debug("vendor: {s}", .{try conn.setup.getVendorSlice(fixed.vendor_len)});
@@ -207,7 +212,7 @@ pub fn go() !void {
         std.log.debug("format[{}] depth={:3} bpp={:3} scanpad={:3}", .{ i, format.depth, format.bits_per_pixel, format.scanline_pad });
     }
     const screen = conn.setup.getFirstScreenPtr(format_list_limit);
-    inline for (@typeInfo(@TypeOf(screen.*)).Struct.fields) |field| {
+    inline for (@typeInfo(@TypeOf(screen.*)).@"struct".fields) |field| {
         std.log.debug("SCREEN 0| {s}: {any}", .{ field.name, @field(screen, field.name) });
     }
 
@@ -215,7 +220,8 @@ pub fn go() !void {
 
     var keymap = Keymap.initVoid();
     {
-        const keymap_response = try x.keymap.request(gpa, conn.sock, conn.setup.fixed().*);
+        var sequence_placeholder: u16 = 0;
+        const keymap_response = try x.keymap.request(gpa, conn.sock, &sequence_placeholder, conn.setup.fixed().*);
         defer keymap_response.deinit(gpa);
         keymap.load(conn.setup.fixed().min_keycode, keymap_response);
     }
@@ -245,40 +251,42 @@ pub fn go() !void {
             //            .backing_pixel = 0xbbeeeeff,
             //            .override_redirect = true,
             //            .save_under = true,
-            .event_mask = x.event.key_press | x.event.key_release | x.event.button_press | x.event.button_release | x.event.enter_window | x.event.leave_window | x.event.pointer_motion
-            //                | x.event.pointer_motion_hint WHAT THIS DO?
-            //                | x.event.button1_motion  WHAT THIS DO?
-            //                | x.event.button2_motion  WHAT THIS DO?
-            //                | x.event.button3_motion  WHAT THIS DO?
-            //                | x.event.button4_motion  WHAT THIS DO?
-            //                | x.event.button5_motion  WHAT THIS DO?
-            //                | x.event.button_motion  WHAT THIS DO?
-            | x.event.keymap_state | x.event.exposure,
-            //            .dont_propagate = 1,
+            .event_mask = .{
+                .key_press = 1,
+                .key_release = 1,
+                .button_press = 1,
+                .button_release = 1,
+                .enter_window = 1,
+                .leave_window = 1,
+                .pointer_motion = 1,
+                .keymap_state = 1,
+                .exposure = 1,
+                // .structure_notify = 1,
+            },
         });
         try conn.send(msg_buf[0..len]);
     }
 
     try createGc(
-        screen.root,
+        screen.root.drawable(),
         global.ids.gc_bg_fg(),
         rgbToX(theme.bg_content, screen.root_depth),
         rgbToX(theme.fg, screen.root_depth),
     );
     try createGc(
-        screen.root,
+        screen.root.drawable(),
         global.ids.gc_cursor_fg(),
         rgbToX(theme.cursor, screen.root_depth),
         rgbToX(theme.fg, screen.root_depth),
     );
     try createGc(
-        screen.root,
+        screen.root.drawable(),
         global.ids.gc_bg_menu_fg(),
         rgbToX(theme.bg_menu, screen.root_depth),
         rgbToX(theme.fg, screen.root_depth),
     );
     try createGc(
-        screen.root,
+        screen.root.drawable(),
         global.ids.gc_bg_menu_err(),
         rgbToX(theme.bg_menu, screen.root_depth),
         rgbToX(theme.err, screen.root_depth),
@@ -289,12 +297,12 @@ pub fn go() !void {
         const text_literal = [_]u16{'m'};
         const text = x.Slice(u16, [*]const u16){ .ptr = &text_literal, .len = text_literal.len };
         var msg: [x.query_text_extents.getLen(text.len)]u8 = undefined;
-        x.query_text_extents.serialize(&msg, global.ids.gc_bg_fg(), text);
+        x.query_text_extents.serialize(&msg, global.ids.gc_bg_fg().fontable(), text);
         try conn.send(&msg);
     }
 
     const double_buf = try x.DoubleBuffer.init(
-        std.mem.alignForward(usize, 1000, std.mem.page_size),
+        std.mem.alignForward(usize, 1000, std.heap.pageSize()),
         .{ .memfd_name = "MedX11DoubleBuffer" },
     );
     defer double_buf.deinit();
@@ -370,7 +378,7 @@ pub fn go() !void {
                     return error.TodoHandleReplyMessage;
                 },
                 .key_press => |msg| {
-                    const mod = KeycodeMod.init(msg.state);
+                    const mod = KeycodeMod.init(@bitCast(msg.state));
                     //std.log.info("key_press: keycode={} mod={s}", .{msg.keycode, @tagName(mod)});
                     const keysym = keymap.getKeysym(msg.keycode, mod);
                     if (x11KeysymToKey(keysym)) |key| {
@@ -380,7 +388,7 @@ pub fn go() !void {
                     }
                 },
                 .key_release => |msg| {
-                    const mod = KeycodeMod.init(msg.state);
+                    const mod = KeycodeMod.init(@bitCast(msg.state));
                     //std.log.info("key_release: keycode={} mod={s}", .{msg.keycode, @tagName(mod)});
                     const keysym = keymap.getKeysym(msg.keycode, mod);
                     if (x11KeysymToKey(keysym)) |key| {
@@ -429,7 +437,7 @@ pub fn go() !void {
     }
 }
 
-fn createGc(drawable_id: u32, gc_id: u32, bg: u32, fg: u32) !void {
+fn createGc(drawable_id: x.Drawable, gc_id: x.GraphicsContext, bg: u32, fg: u32) !void {
     var msg_buf: [x.create_gc.max_len]u8 = undefined;
     const len = x.create_gc.serialize(&msg_buf, .{
         .gc_id = gc_id,
@@ -541,14 +549,14 @@ fn render() !void {
     }
 }
 
-fn renderText(gc_id: u32, text: []const u8, pos: XY(u16)) !void {
+fn renderText(gc_id: x.GraphicsContext, text: []const u8, pos: XY(u16)) !void {
     const xslice = x.Slice(u8, [*]const u8){
         .ptr = text.ptr,
         .len = std.math.cast(u8, text.len) orelse @panic("todo: handle render text longer than 255"),
     };
     var msg_buf: [x.image_text8.max_len]u8 = undefined;
     x.image_text8.serialize(&msg_buf, xslice, .{
-        .drawable_id = global.ids.window(),
+        .drawable_id = global.ids.window().drawable(),
         .gc_id = gc_id,
         .x = @intCast(pos.x * global.font_dims.width),
         .y = @as(i16, @intCast(pos.y * global.font_dims.height)) + global.font_dims.font_ascent,

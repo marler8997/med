@@ -184,8 +184,8 @@ const Pipe = struct {
             1,
             // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             // TODO: what the heck should I set these to?
-            std.mem.page_size,
-            std.mem.page_size,
+            std.heap.page_size_min,
+            std.heap.page_size_min,
             0,
             &sec_attr,
         );
