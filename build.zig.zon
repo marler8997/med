@@ -5,13 +5,9 @@
     .minimum_zig_version = "0.14.1",
 
     .dependencies = .{
-        .x11 = .{
-            .url = "git+https://github.com/marler8997/zigx#718f531913acb921a25951a3d47e03c7f468636c",
-            .hash = "x11-0.0.0-yWuw5lYgCQDLrPM8H0EuX6LzCby8clB1viSyvT6k-hWs",
-        },
-        .win32 = .{
-            .url = "git+https://github.com/marlersoft/zigwin32#d21b419d808215e1f82605fdaddc49750bfa3bca",
-            .hash = "zigwin32-25.0.28-preview-AAAAAI0J-wP-8_KKo4Yjr33XLhVhlJmeagGUedByaOnX",
+        .zin = .{
+            .url = "git+https://github.com/marler8997/zin#b19cf9d94e6ef1968be33589704565c147a2751f",
+            .hash = "zin-0.0.0-W7QDx1xcAgCCgWInFpY4YggV-qEDyL20K8F_oSYQK0kI",
         },
     },
     .paths = .{

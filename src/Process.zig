@@ -2,13 +2,13 @@ const Process = @This();
 
 const builtin = @import("builtin");
 const std = @import("std");
-const win32 = @import("win32").everything;
+const win32 = @import("zin").platform.win32;
 const Impl = switch (builtin.os.tag) {
     .windows => @import("ProcessWin32.zig"),
     else => struct {},
 };
 const Win32Error = @import("Win32Error.zig");
-const platform = @import("platform.zig");
+const hook = @import("hook.zig");
 
 const PagedMem = @import("pagedmem.zig").PagedMem;
 
@@ -45,9 +45,9 @@ fn oom(e: error{OutOfMemory}) noreturn {
 
 pub fn deinit(self: *Process) void {
     if (self.handles_added) {
-        std.debug.assert(platform.removeHandle(self.process.?.info.hProcess));
-        std.debug.assert(platform.removeHandle(self.process.?.stderr.read));
-        std.debug.assert(platform.removeHandle(self.process.?.stdout.read));
+        std.debug.assert(hook.removeHandle(self.process.?.info.hProcess));
+        std.debug.assert(hook.removeHandle(self.process.?.stderr.read));
+        std.debug.assert(hook.removeHandle(self.process.?.stdout.read));
         self.handles_added = false;
     }
     if (self.child_spawned) {
@@ -90,9 +90,9 @@ pub fn start(self: *Process) error{StartProcess}!void {
     }
 
     if (!self.handles_added) {
-        std.debug.assert(platform.addHandle(self.impl.?.stdout.read, .{ .context = self, .func = onStdoutReady }));
-        std.debug.assert(platform.addHandle(self.impl.?.stderr.read, .{ .context = self, .func = onStderrReady }));
-        std.debug.assert(platform.addHandle(self.impl.?.info.hProcess.?, .{ .context = self, .func = onProcessDied }));
+        std.debug.assert(hook.addHandle(self.impl.?.stdout.read, .{ .context = self, .func = onStdoutReady }));
+        std.debug.assert(hook.addHandle(self.impl.?.stderr.read, .{ .context = self, .func = onStderrReady }));
+        std.debug.assert(hook.addHandle(self.impl.?.info.hProcess.?, .{ .context = self, .func = onProcessDied }));
         self.handles_added = true;
     }
 }
@@ -145,7 +145,7 @@ fn onStdReady(context: *anyopaque, handle: win32.HANDLE, kind: StdoutKind) void 
         const data = read_buf[0..read_len];
         std.log.info("got {} bytes from {s}: '{}'", .{ read_len, @tagName(kind), std.zig.fmtEscapes(data) });
         paged_mem.finishRead(read_len);
-        platform.processModified();
+        hook.processModified();
     }
 }
 fn onProcessDied(context: *anyopaque, handle: win32.HANDLE) void {

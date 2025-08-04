@@ -1,5 +1,5 @@
 // zig fmt: off
-pub const Rgb = struct { r: u8, g: u8, b: u8 };
+pub const Rgb = @import("zin").Rgb8;
 pub const bg_void    = Rgb{ .r = 0x19, .g = 0x19, .b = 0x19 };
 pub const bg_content = Rgb{ .r = 0x24, .g = 0x24, .b = 0x24 };
 pub const bg_status  = Rgb{ .r = 0x24, .g = 0x24, .b = 0x44 };

@@ -1,7 +1,7 @@
 const Process = @This();
 
 const std = @import("std");
-const win32 = @import("win32").everything;
+const win32 = @import("zin").platform.win32;
 const Win32Error = @import("Win32Error.zig");
 
 job: win32.HANDLE,
