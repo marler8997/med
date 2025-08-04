@@ -29,14 +29,14 @@ pub fn getTerminalSize(tty: Tty) XY(i32) {
             .x = @intCast(info.srWindow.Right - info.srWindow.Left + 1),
             .y = @intCast(info.srWindow.Bottom - info.srWindow.Top + 1),
         };
-    } else {
+    } else if (builtin.os.tag == .linux) {
         //const request_term_size = "\x1b[18t";
-        var winsz = std.c.winsize{ .ws_col = 0, .ws_row = 0, .ws_xpixel = 0, .ws_ypixel = 0 };
-        const rv = std.c.ioctl(tty.getHandle(), std.c.T.IOCGWINSZ, @intFromPtr(&winsz));
+        var winsz = std.posix.winsize{ .col = 0, .row = 0, .xpixel = 0, .ypixel = 0 };
+        const rv = std.os.linux.ioctl(tty.getHandle(), std.posix.T.IOCGWINSZ, @intFromPtr(&winsz));
         const err = std.posix.errno(rv);
 
         if (rv >= 0) {
-            return .{ .y = winsz.ws_row, .x = winsz.ws_col };
+            return .{ .y = winsz.row, .x = winsz.col };
         } else {
             std.process.exit(0);
             //TODO this is a pretty terrible way to handle issues...

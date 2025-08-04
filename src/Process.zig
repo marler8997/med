@@ -1,8 +1,12 @@
 const Process = @This();
 
+const builtin = @import("builtin");
 const std = @import("std");
 const win32 = @import("win32").everything;
-const Impl = @import("ProcessWin32.zig");
+const Impl = switch (builtin.os.tag) {
+    .windows => @import("ProcessWin32.zig"),
+    else => struct {},
+};
 const Win32Error = @import("Win32Error.zig");
 const platform = @import("platform.zig");
 
@@ -11,8 +15,9 @@ const PagedMem = @import("pagedmem.zig").PagedMem;
 arena_instance: std.heap.ArenaAllocator,
 
 impl: ?Impl = null,
-overlapped_stdout: ?win32.OVERLAPPED = null,
-overlapped_stderr: ?win32.OVERLAPPED = null,
+
+overlapped_stdout: MaybeOverlapped = maybe_overlapped_null,
+overlapped_stderr: MaybeOverlapped = maybe_overlapped_null,
 handles_added: bool = false,
 
 paged_mem_stdout: PagedMem(std.heap.page_size_min) = .{},
@@ -20,6 +25,19 @@ paged_mem_stderr: PagedMem(std.heap.page_size_min) = .{},
 
 command: std.ArrayListUnmanaged(u8) = .{},
 command_cursor_pos: usize = 0,
+
+const Overlapped = switch (builtin.os.tag) {
+    .windows => win32.OVERLAPPED,
+    else => void,
+};
+const MaybeOverlapped = switch (builtin.os.tag) {
+    .windows => ?win32.OVERLAPPED,
+    else => void,
+};
+const maybe_overlapped_null: MaybeOverlapped = switch (builtin.os.tag) {
+    .windows => null,
+    else => {},
+};
 
 fn oom(e: error{OutOfMemory}) noreturn {
     @panic(@errorName(e));
@@ -46,6 +64,8 @@ pub fn deinit(self: *Process) void {
 const StdoutKind = enum { stdout, stderr };
 
 pub fn start(self: *Process) error{StartProcess}!void {
+    if (builtin.os.tag != .windows) @panic("todo");
+
     if (self.impl == null) {
         var win32_err: Win32Error = undefined;
         self.impl = Impl.start(&win32_err) catch {
