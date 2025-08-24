@@ -317,7 +317,7 @@ fn paint(d: *const zin.Draw(.{ .static = .main })) void {
                 const row_index: i32 = @intCast(row_index_usize);
                 const y: i32 = @intCast(row_index * font_size.y);
                 const row_str = row.getViewport(view.*, viewport_size.x);
-                drawFileRow(d, mode, row_str, 0, y);
+                drawFileRow(d, mode, row_str, 0, y, font_size.x);
             }
         },
     }
@@ -363,16 +363,204 @@ fn paint(d: *const zin.Draw(.{ .static = .main })) void {
     }
 }
 
-fn drawFileRow(d: *const zin.Draw(.{ .static = .main }), mode: FileMode, row_str: []const u8, x: i32, y: i32) void {
+fn drawFileRow(d: *const zin.Draw(.{ .static = .main }), mode: FileMode, row_str: []const u8, x: i32, y: i32, font_width: i32) void {
     // NOTE: for now we only support ASCII
     switch (mode) {
         .default => {
             d.text(row_str, x, y, theme.fg);
         },
         .zig => {
-            d.text(row_str, x, y, .{ .r = 0xcf, .g = 0xa1, .b = 0 });
+            var offset: usize = 0;
+            while (offset < row_str.len) {
+                const token = tokenizeZig(row_str, offset);
+                if (token.end > offset) {
+                    // const token_kind = tokenKindFromZig(token.tag);
+                    d.text(
+                        row_str[offset..token.end],
+                        x + (@as(i32, @intCast(offset)) * font_width),
+                        y,
+                        token.kind.color(),
+                    );
+                    offset = token.end;
+                } else {
+                    offset += 1; // skip this one char I guess
+                }
+            }
         },
     }
+}
+
+const TokenKind = enum {
+    todo,
+    unknown,
+    keyword,
+    string_literal,
+    operator,
+    doc_comment,
+    comment,
+    pub fn color(self: TokenKind) zin.Rgb8 {
+        return switch (self) {
+            // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            .todo => theme.fg,
+            .unknown => .{ .r = 0xff, .g = 0x33, .b = 0x33 },
+            .keyword => .{ .r = 0xf7, .g = 0xa4, .b = 0x1d },
+            .string_literal => .{ .r = 0x3c, .g = 0x51, .b = 0x90 },
+            .operator => .{ .r = 0x04, .g = 0x96, .b = 0xff },
+            .doc_comment => .{ .r = 0x20, .g = 0x83, .b = 0x73 },
+            .comment => .{ .r = 0x3a, .g = 0xcf, .b = 0xc8 },
+        };
+    }
+};
+
+fn tokenizeZig(row_str: []const u8, start: usize) struct {
+    kind: TokenKind,
+    end: usize,
+} {
+    var tokenizer = zigtokenizer.Tokenizer{ .buffer = row_str, .index = start };
+    const token = tokenizer.next();
+    std.debug.assert(token.loc.start >= start);
+    switch (token.tag) {
+        .eof => {
+            if (std.mem.indexOf(u8, row_str, "//")) |comment_start| {
+                if (comment_start == 0) return .{ .kind = .comment, .end = row_str.len };
+                return .{ .kind = .unknown, .end = comment_start };
+            }
+        },
+        else => {},
+    }
+    return .{ .kind = tokenKindFromZig(token.tag), .end = token.loc.end };
+}
+
+fn tokenKindFromZig(tag: zigtokenizer.Token.Tag) TokenKind {
+    return switch (tag) {
+        .invalid,
+        .invalid_periodasterisks,
+        .identifier,
+        => .todo,
+        .string_literal,
+        .multiline_string_literal_line,
+        .char_literal,
+        => .string_literal,
+        .eof => .unknown,
+        .builtin => .keyword,
+        .bang,
+        .pipe,
+        .pipe_pipe,
+        .pipe_equal,
+        .equal,
+        .equal_equal,
+        .equal_angle_bracket_right,
+        .bang_equal,
+        .l_paren,
+        .r_paren,
+        .semicolon,
+        .percent,
+        .percent_equal,
+        .l_brace,
+        .r_brace,
+        .l_bracket,
+        .r_bracket,
+        .period,
+        .period_asterisk,
+        .ellipsis2,
+        .ellipsis3,
+        .caret,
+        .caret_equal,
+        .plus,
+        .plus_plus,
+        .plus_equal,
+        .plus_percent,
+        .plus_percent_equal,
+        .plus_pipe,
+        .plus_pipe_equal,
+        .minus,
+        .minus_equal,
+        .minus_percent,
+        .minus_percent_equal,
+        .minus_pipe,
+        .minus_pipe_equal,
+        .asterisk,
+        .asterisk_equal,
+        .asterisk_asterisk,
+        .asterisk_percent,
+        .asterisk_percent_equal,
+        .asterisk_pipe,
+        .asterisk_pipe_equal,
+        .arrow,
+        .colon,
+        .slash,
+        .slash_equal,
+        .comma,
+        .ampersand,
+        .ampersand_equal,
+        .question_mark,
+        .angle_bracket_left,
+        .angle_bracket_left_equal,
+        .angle_bracket_angle_bracket_left,
+        .angle_bracket_angle_bracket_left_equal,
+        .angle_bracket_angle_bracket_left_pipe,
+        .angle_bracket_angle_bracket_left_pipe_equal,
+        .angle_bracket_right,
+        .angle_bracket_right_equal,
+        .angle_bracket_angle_bracket_right,
+        .angle_bracket_angle_bracket_right_equal,
+        .tilde,
+        => .operator,
+        .number_literal,
+        .doc_comment,
+        .container_doc_comment,
+        => .doc_comment,
+        .keyword_addrspace,
+        .keyword_align,
+        .keyword_allowzero,
+        .keyword_and,
+        .keyword_anyframe,
+        .keyword_anytype,
+        .keyword_asm,
+        .keyword_async,
+        .keyword_await,
+        .keyword_break,
+        .keyword_callconv,
+        .keyword_catch,
+        .keyword_comptime,
+        .keyword_const,
+        .keyword_continue,
+        .keyword_defer,
+        .keyword_else,
+        .keyword_enum,
+        .keyword_errdefer,
+        .keyword_error,
+        .keyword_export,
+        .keyword_extern,
+        .keyword_fn,
+        .keyword_for,
+        .keyword_if,
+        .keyword_inline,
+        .keyword_noalias,
+        .keyword_noinline,
+        .keyword_nosuspend,
+        .keyword_opaque,
+        .keyword_or,
+        .keyword_orelse,
+        .keyword_packed,
+        .keyword_pub,
+        .keyword_resume,
+        .keyword_return,
+        .keyword_linksection,
+        .keyword_struct,
+        .keyword_suspend,
+        .keyword_switch,
+        .keyword_test,
+        .keyword_threadlocal,
+        .keyword_try,
+        .keyword_union,
+        .keyword_unreachable,
+        .keyword_usingnamespace,
+        .keyword_var,
+        .keyword_volatile,
+        .keyword_while,
+        => .keyword,
+    };
 }
 
 fn getDpi(d: *const zin.Draw(.{ .static = .main })) u32 {
@@ -832,3 +1020,4 @@ const theme = @import("theme.zig");
 const Input = @import("Input.zig");
 const XY = @import("xy.zig").XY;
 const FileMode = @import("filemode.zig").FileMode;
+const zigtokenizer = @import("zigtokenizer.zig");
