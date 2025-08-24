@@ -576,8 +576,13 @@ fn handleAction(action: Input.Action) void {
             }
         },
         .backspace => {
-            if (global_open_file_prompt) |_| {
-                std.log.info("todo: implement backspace for file prompt", .{});
+            if (global_open_file_prompt) |*prompt| {
+                if (prompt.path_len == 0) {
+                    hook.beep();
+                } else {
+                    prompt.path_len -= 1;
+                    hook.viewModified();
+                }
             } else switch (global_current_pane) {
                 .welcome => {},
                 .process => |process| if (process.backspace()) {
