@@ -312,12 +312,12 @@ fn paint(d: *const zin.Draw(.{ .static = .main })) void {
                     d.rect(.ltwh(viewport_pos.x, viewport_pos.y, font_size.x, font_size.y), theme.cursor);
                 }
             }
+            const mode: FileMode = if (view.file) |f| f.mode else .default;
             for (viewport_rows, 0..) |row, row_index_usize| {
                 const row_index: i32 = @intCast(row_index_usize);
                 const y: i32 = @intCast(row_index * font_size.y);
                 const row_str = row.getViewport(view.*, viewport_size.x);
-                // NOTE: for now we only support ASCII
-                d.text(row_str, 0, y, theme.fg);
+                drawFileRow(d, mode, row_str, 0, y);
             }
         },
     }
@@ -360,6 +360,18 @@ fn paint(d: *const zin.Draw(.{ .static = .main })) void {
         const msg = "Error:";
         d.text(msg, 0, 0 * font_size.y, theme.err);
         d.text(err_msg.slice, 0, 1 * font_size.y, theme.err);
+    }
+}
+
+fn drawFileRow(d: *const zin.Draw(.{ .static = .main }), mode: FileMode, row_str: []const u8, x: i32, y: i32) void {
+    // NOTE: for now we only support ASCII
+    switch (mode) {
+        .default => {
+            d.text(row_str, x, y, theme.fg);
+        },
+        .zig => {
+            d.text(row_str, x, y, .{ .r = 0xcf, .g = 0xa1, .b = 0 });
+        },
     }
 }
 
@@ -819,3 +831,4 @@ const engine = @import("engine.zig");
 const theme = @import("theme.zig");
 const Input = @import("Input.zig");
 const XY = @import("xy.zig").XY;
+const FileMode = @import("filemode.zig").FileMode;

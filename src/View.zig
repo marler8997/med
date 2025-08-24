@@ -1,6 +1,7 @@
 const View = @This();
 
 const std = @import("std");
+const FileMode = @import("filemode.zig").FileMode;
 const MappedFile = @import("MappedFile.zig");
 const RefString = @import("RefString.zig");
 const XY = @import("xy.zig").XY;
@@ -33,11 +34,13 @@ pub fn arena(self: *View) std.mem.Allocator {
 pub const OpenFile = struct {
     map: MappedFile,
     name: RefString,
+    mode: FileMode,
     pub fn initAndNameAddRef(map: MappedFile, name: RefString) OpenFile {
         name.addRef();
         return .{
             .map = map,
             .name = name,
+            .mode = if (std.mem.endsWith(u8, name.slice, ".zig")) .zig else .default,
         };
     }
     pub fn close(self: OpenFile) void {
