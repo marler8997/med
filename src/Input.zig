@@ -12,6 +12,8 @@ pub const Action = union(enum) {
     cursor_down,
     cursor_line_start,
     cursor_line_end,
+    @"page-up",
+    @"page-down",
     tab,
     delete,
     backspace,
@@ -287,11 +289,23 @@ pub const key_count = @typeInfo(Key).Enum.fields.len;
 pub const KeyPressKind = enum { initial, repeat };
 pub const KeyState = enum { up, down, down_repeat };
 
+const KeyModCombo = enum {
+    none,
+    control_only,
+    alt_only,
+    control_alt,
+};
+
 pub const KeyMods = packed struct(u2) {
     control: bool,
     alt: bool,
     pub fn eql(self: KeyMods, other: KeyMods) bool {
         return @as(u2, @bitCast(self)) == @as(u2, @bitCast(other));
+    }
+    pub fn combo(self: KeyMods) KeyModCombo {
+        return if (self.control)
+            (if (self.alt) .control_alt else .control_only)
+        else if (self.alt) .alt_only else .none;
     }
     pub fn format(
         self: KeyMods,
@@ -377,73 +391,82 @@ pub fn evaluateKeybind(
 ) KeybindResult {
     switch (keybind.len) {
         0 => unreachable,
-        1 => if (keybind.buf[0].mods.control) switch (keybind.buf[0].key) {
-            .comma => return .prefix,
-            .a => return .{ .action = .cursor_line_start },
-            .b => return .{ .action = .cursor_back },
-            .d => return .{ .action = .delete },
-            .e => return .{ .action = .cursor_line_end },
-            .f => return .{ .action = .cursor_forward },
-            .g => return .{ .action = .@"keyboard-quit" },
-            .k => return .{ .action = .kill_line },
-            .n => return .{ .action = .cursor_down },
-            .p => return .{ .action = .cursor_up },
-            .x => return .prefix,
-            else => {},
-        } else return switch (keybind.buf[0].key) {
-            .control, .alt => .modifier,
-            .enter => return .{ .action = .enter },
-            .backspace => return .{ .action = .backspace },
-            .tab => return .{ .action = .tab },
-            .escape => return .unbound,
-            .space,
-            .bang,
-            .double_quote,
-            .pound,
-            .dollar,
-            .percent,
-            .ampersand,
-            .single_quote,
-            .open_paren,
-            .close_paren,
-            .star,
-            .plus,
-            .comma,
-            .dash,
-            .period,
-            .forward_slash,
-            // zig fmt: off
-            .@"0", .@"1", .@"2", .@"3", .@"4",
-            .@"5", .@"6", .@"7", .@"8", .@"9",
-            // zig fmt: on
-            .colon,
-            .semicolon,
-            .open_angle_bracket,
-            .equal,
-            .close_angle_bracket,
-            .question_mark,
-            .at,
-            // zig fmt: off
-            .A, .B, .C, .D, .E, .F, .G, .H, .I, .J, .K, .L, .M,
-            .N, .O, .P, .Q, .R, .S, .T, .U, .V, .W, .X, .Y, .Z,
-            // zig fmt: on
-            .open_square_bracket,
-            .backslash,
-            .close_square_bracket,
-            .caret,
-            .underscore,
-            .backtick,
-            // zig fmt: off
-            .a, .b, .c, .d, .e, .f, .g, .h, .i, .j, .k, .l, .m,
-            .n, .o, .p, .q, .r, .s, .t, .u, .v, .w, .x, .y, .z,
-            // zig fmt: on
-            .open_curly,
-            .pipe,
-            .close_curly,
-            .tilda,
-            => |c| {
-                const offset: u8 = @intFromEnum(c) - @intFromEnum(Key.space);
-                return .{ .action = .{ .add_char = ' ' + offset } };
+        1 => switch (keybind.buf[0].mods.combo()) {
+            .alt_only => switch (keybind.buf[0].key) {
+                .v => return .{ .action = .@"page-up" },
+                else => {},
+            },
+            .control_alt => {},
+            .control_only => switch (keybind.buf[0].key) {
+                .comma => return .prefix,
+                .a => return .{ .action = .cursor_line_start },
+                .b => return .{ .action = .cursor_back },
+                .d => return .{ .action = .delete },
+                .e => return .{ .action = .cursor_line_end },
+                .f => return .{ .action = .cursor_forward },
+                .g => return .{ .action = .@"keyboard-quit" },
+                .k => return .{ .action = .kill_line },
+                .n => return .{ .action = .cursor_down },
+                .p => return .{ .action = .cursor_up },
+                .v => return .{ .action = .@"page-down" },
+                .x => return .prefix,
+                else => {},
+            },
+            .none => return switch (keybind.buf[0].key) {
+                .control, .alt => .modifier,
+                .enter => return .{ .action = .enter },
+                .backspace => return .{ .action = .backspace },
+                .tab => return .{ .action = .tab },
+                .escape => return .unbound,
+                .space,
+                .bang,
+                .double_quote,
+                .pound,
+                .dollar,
+                .percent,
+                .ampersand,
+                .single_quote,
+                .open_paren,
+                .close_paren,
+                .star,
+                .plus,
+                .comma,
+                .dash,
+                .period,
+                .forward_slash,
+                // zig fmt: off
+                .@"0", .@"1", .@"2", .@"3", .@"4",
+                .@"5", .@"6", .@"7", .@"8", .@"9",
+                // zig fmt: on
+                .colon,
+                .semicolon,
+                .open_angle_bracket,
+                .equal,
+                .close_angle_bracket,
+                .question_mark,
+                .at,
+                // zig fmt: off
+                .A, .B, .C, .D, .E, .F, .G, .H, .I, .J, .K, .L, .M,
+                .N, .O, .P, .Q, .R, .S, .T, .U, .V, .W, .X, .Y, .Z,
+                // zig fmt: on
+                .open_square_bracket,
+                .backslash,
+                .close_square_bracket,
+                .caret,
+                .underscore,
+                .backtick,
+                // zig fmt: off
+                .a, .b, .c, .d, .e, .f, .g, .h, .i, .j, .k, .l, .m,
+                .n, .o, .p, .q, .r, .s, .t, .u, .v, .w, .x, .y, .z,
+                // zig fmt: on
+                .open_curly,
+                .pipe,
+                .close_curly,
+                .tilda,
+                => |c| {
+                    const offset: u8 = @intFromEnum(c) - @intFromEnum(Key.space);
+                    return .{ .action = .{ .add_char = ' ' + offset } };
+                },
             },
         },
         2 => if (keybind.buf[0].mods.control) switch (keybind.buf[0].key) {

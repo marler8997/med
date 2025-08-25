@@ -1,6 +1,7 @@
 const View = @This();
 
 const std = @import("std");
+const hook = @import("hook.zig");
 const FileMode = @import("filemode.zig").FileMode;
 const MappedFile = @import("MappedFile.zig");
 const RefString = @import("RefString.zig");
@@ -9,7 +10,7 @@ const XY = @import("xy.zig").XY;
 arena_instance: std.heap.ArenaAllocator,
 file: ?OpenFile = null,
 rows: std.ArrayListUnmanaged(Row) = .{},
-cursor_pos: ?XY(u16) = .{ .x = 0, .y = 0 },
+cursor_pos: ?XY(u32) = .{ .x = 0, .y = 0 },
 viewport_pos: XY(u32) = .{ .x = 0, .y = 0 },
 
 pub fn reset(self: *View) void {
@@ -86,7 +87,7 @@ pub fn getViewportRows(self: View, viewport_height: usize) []Row {
     const avail = self.rows.items.len - self.viewport_pos.y;
     return self.rows.items[self.viewport_pos.y..][0..@min(avail, viewport_height)];
 }
-pub fn toViewportPos(self: View, viewport_size: XY(usize), pos: XY(u16)) ?XY(u16) {
+pub fn toViewportPos(self: View, viewport_size: XY(usize), pos: XY(u32)) ?XY(u32) {
     if (pos.x < self.viewport_pos.x) return null;
     if (pos.y < self.viewport_pos.y) return null;
     if (pos.x >= self.viewport_pos.x + viewport_size.x) return null;
@@ -174,6 +175,66 @@ pub fn cursorLineEnd(self: *View) bool {
         }
     }
     return false;
+}
+
+pub fn @"page-up"(self: *View) bool {
+    if (self.viewport_pos.y == 0) {
+        std.log.info("page-up: already at top", .{});
+        return false;
+    }
+
+    const view_row_count = hook.getViewRowCount();
+    const page_line_count = switch (view_row_count) {
+        0...3 => 1,
+        else => view_row_count - 2,
+    };
+
+    const new_viewport_y = if (self.viewport_pos.y > page_line_count)
+        self.viewport_pos.y - page_line_count
+    else
+        0;
+
+    self.viewport_pos.y = new_viewport_y;
+
+    if (self.cursor_pos) |*cursor_pos| {
+        const viewport_bottom = self.viewport_pos.y + view_row_count;
+        if (cursor_pos.y >= viewport_bottom) {
+            cursor_pos.y = viewport_bottom -| 1;
+            if (cursor_pos.y >= self.rows.items.len and self.rows.items.len > 0) {
+                cursor_pos.y = @intCast(self.rows.items.len - 1);
+            }
+        }
+    }
+
+    return true;
+}
+
+pub fn @"page-down"(self: *View) bool {
+    const view_row_count = hook.getViewRowCount();
+    const page_line_count = switch (view_row_count) {
+        0...3 => 1,
+        else => view_row_count - 2,
+    };
+    const max_viewport_top = if (self.rows.items.len >= view_row_count) self.rows.items.len - view_row_count else 0;
+    if (self.viewport_pos.y == max_viewport_top) {
+        std.log.info("page-down: already at end", .{});
+        return false;
+    }
+    if (self.viewport_pos.y > max_viewport_top) {
+        std.log.warn("page-down: viewport top {} is > max {}", .{ self.viewport_pos.y, max_viewport_top });
+        self.viewport_pos.y = @intCast(max_viewport_top);
+        // TODO: update cursor pos?
+        return true;
+    }
+
+    const new_candidate_viewport_top = self.viewport_pos.y + page_line_count;
+    self.viewport_pos.y = @intCast(@min(new_candidate_viewport_top, max_viewport_top));
+    if (self.cursor_pos) |*cursor_pos| {
+        if (cursor_pos.y < self.viewport_pos.y) {
+            cursor_pos.* = self.viewport_pos;
+        }
+    }
+    return true;
 }
 
 pub const DeleteOption = enum { from_backspace, not_from_backspace };

@@ -171,6 +171,9 @@ const Dialog = struct {
             .cursor_line_start,
             .cursor_line_end,
             => {}, // ignore
+            .@"page-up",
+            .@"page-down",
+            => {}, // ignore
             .delete => {}, // ignore
             .tab => {},
             .backspace => {
@@ -303,6 +306,9 @@ fn handleAction(action: Input.Action) void {
             .cursor_down,
             .cursor_line_start,
             .cursor_line_end,
+            => {}, // ignore
+            .@"page-up",
+            .@"page-down",
             => {}, // ignore
             .tab => {}, // ignore
             .delete => {}, // ignore
@@ -545,6 +551,38 @@ fn handleAction(action: Input.Action) void {
                 },
                 .file => |view| {
                     if (view.cursorLineEnd()) {
+                        hook.viewModified();
+                    }
+                },
+            }
+        },
+        .@"page-up" => {
+            if (global_open_file_prompt) |_| {
+                std.log.info("should page-up do something in the open file prompt?", .{});
+            } else switch (global_current_pane) {
+                .welcome => {},
+                .process => |process| {
+                    _ = process;
+                    std.log.info("todo: implement page-up for process", .{});
+                },
+                .file => |view| {
+                    if (view.@"page-up"()) {
+                        hook.viewModified();
+                    }
+                },
+            }
+        },
+        .@"page-down" => {
+            if (global_open_file_prompt) |_| {
+                std.log.info("should page-down do something in the open file prompt?", .{});
+            } else switch (global_current_pane) {
+                .welcome => {},
+                .process => |process| {
+                    _ = process;
+                    std.log.info("todo: implement page-down for process", .{});
+                },
+                .file => |view| {
+                    if (view.@"page-down"()) {
                         hook.viewModified();
                     }
                 },

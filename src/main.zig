@@ -308,8 +308,8 @@ fn paint(d: *const zin.Draw(.{ .static = .main })) void {
             if (view.cursor_pos) |cursor_global_pos| {
                 if (view.toViewportPos(viewport_size, cursor_global_pos)) |cursor_viewport_pos| {
                     const viewport_pos = zin.XY{
-                        .x = @intCast(cursor_viewport_pos.x * font_size.x),
-                        .y = @intCast(cursor_viewport_pos.y * font_size.y),
+                        .x = @intCast(cursor_viewport_pos.x * @as(u32, @intCast(font_size.x))),
+                        .y = @intCast(cursor_viewport_pos.y * @as(u32, @intCast(font_size.y))),
                     };
                     d.rect(.ltwh(viewport_pos.x, viewport_pos.y, font_size.x, font_size.y), theme.cursor);
                 }
@@ -623,6 +623,19 @@ pub fn beep() void {
     if (builtin.os.tag == .windows) {
         _ = win32.MessageBeep(@as(u32, @bitCast(win32.MB_OK)));
     }
+}
+
+pub fn getViewRowCount() u32 {
+    const client_size = zin.staticWindow(.main).getClientSize();
+    const font_height = blk: switch (zin.platform_kind) {
+        .win32 => {
+            const dpi = win32.dpiFromHwnd(zin.staticWindow(.main).hwnd());
+            break :blk getFontSize(i32, dpi, &global.platform).y;
+        },
+        else => @panic("todo"),
+    };
+    const status_top = client_size.y - font_height;
+    return @intCast(@divTrunc(status_top, font_height));
 }
 
 pub fn addHandle(handle: win32.HANDLE, cb: HandleCallback) bool {
