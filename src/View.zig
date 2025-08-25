@@ -12,18 +12,18 @@ rows: std.ArrayListUnmanaged(Row) = .{},
 cursor_pos: ?XY(u16) = .{ .x = 0, .y = 0 },
 viewport_pos: XY(u32) = .{ .x = 0, .y = 0 },
 
-pub fn init() View {
-    return .{
-        .arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator),
-    };
-}
-pub fn deinit(self: *View) void {
+pub fn reset(self: *View) void {
     if (self.file) |file| {
         file.close();
+        self.file = null;
     }
-    // no need to deinit "rows" because of arena
-    self.arena_instance.deinit();
-    self.* = undefined;
+    // no need to free "rows" because of arena
+    if (!self.arena_instance.reset(.retain_capacity)) {
+        std.log.warn("view arena failed to reset", .{});
+    }
+    self.rows = .{};
+    self.cursor_pos = .{ .x = 0, .y = 0 };
+    self.viewport_pos = .{ .x = 0, .y = 0 };
 }
 
 // TODO: make this private once I move more code into this file

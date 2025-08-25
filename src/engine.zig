@@ -93,7 +93,9 @@ pub fn notifyKeyDown(press_kind: Input.KeyPressKind, key: Input.Keybind.Node) vo
 var global_process: Process = .{
     .arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator),
 };
-var global_file: View = View.init();
+var global_file: View = .{
+    .arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator),
+};
 
 const Dialog = struct {
     pub const Kind = enum {
@@ -650,8 +652,7 @@ fn @"open-file"(filename: RefString) error{Reported}!void {
         global_current_pane = .welcome;
     }
 
-    global_file.deinit();
-    global_file = View.init();
+    global_file.reset();
 
     {
         var line_it = std.mem.splitScalar(u8, mapped_file.mem, '\n');
@@ -738,8 +739,7 @@ fn saveFile() void {
     const save_cursor_pos = view.cursor_pos;
     const save_viewport_pos = view.viewport_pos;
 
-    view.deinit();
-    view.* = View.init();
+    view.reset();
     hook.viewModified();
 
     @"open-file"(save_filename) catch |err| switch (err) {
@@ -795,7 +795,7 @@ fn @"kill-pane"(opt: struct { prompt_unsaved_changes: bool }) void {
                     return;
                 }
             }
-            view.deinit();
+            view.reset();
             global_current_pane = .welcome;
             hook.paneModified();
         },
