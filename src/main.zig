@@ -168,7 +168,7 @@ fn main2() !void {
     defer zin.staticWindow(.main).unregisterClass();
     try zin.staticWindow(.main).create(.{
         .title = "Med",
-        .size = .{ .window = initial_placement.size },
+        .size = .{ .window = initial_placement.resolveSize(.{ .x = 400, .y = 800 }) },
         .pos = initial_placement.pos,
     });
     // TODO: not working for x11 yet, closing the window
@@ -574,7 +574,10 @@ fn getDpi(d: *const zin.Draw(.{ .static = .main })) u32 {
 
 fn getFontSize(comptime T: type, dpi: u32, globals: *PlatformGlobals) if (T == i32) zin.XY else XY(T) {
     switch (zin.platform_kind) {
-        .x11 => @panic("getFontSize not implemented on x11"),
+        .x11 => {
+            std.log.warn("!!!!! getFontSize not implemented on x11, using fake value of 10x20", .{});
+            return .{ .x = 10, .y = 20 };
+        },
         .win32 => {
             const hdc = win32.CreateCompatibleDC(null);
             defer if (0 == win32.DeleteDC(hdc)) win32.panicWin32("DeleteDC", win32.GetLastError());
@@ -874,6 +877,17 @@ const WindowPlacement = struct {
                 .y = window_use_default,
             },
         };
+    }
+    pub fn resolveSize(self: *const WindowPlacement, default_size: zin.XY) zin.XY {
+        var result = self.size;
+        switch (zin.platform_kind) {
+            .win32 => {},
+            .x11, .macos => {
+                if (self.size.x == window_use_default) result.x = default_size.x;
+                if (self.size.y == window_use_default) result.y = default_size.y;
+            },
+        }
+        return result;
     }
 };
 
