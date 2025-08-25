@@ -1,6 +1,4 @@
 const global = struct {
-    var x11: bool = false;
-
     var platform: PlatformGlobals = .{};
     var arena_instance = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
@@ -10,6 +8,9 @@ const global = struct {
 };
 const PlatformGlobals = switch (zin.platform_kind) {
     .win32 => PlatformGlobalsWin32,
+    .x11 => struct {
+        font_size: ?zin.XY = null,
+    },
     else => struct {},
 };
 const PlatformGlobalsWin32 = struct {
@@ -174,6 +175,11 @@ fn main2() !void {
     // TODO: not working for x11 yet, closing the window
     //       seems to close the entire X11 connection right now?
     defer if (zin.platform_kind != .x11) zin.staticWindow(.main).destroy();
+
+    if (zin.platform_kind == .x11) {
+        std.debug.assert(global.platform.font_size == null);
+        global.platform.font_size = try requestFontSizeX11(zin.platform.global.connection.staticWindowGc(.main));
+    }
 
     if (zin.platform_kind == .win32) {
         // TODO: maybe use DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 if applicable
@@ -572,12 +578,40 @@ fn getDpi(d: *const zin.Draw(.{ .static = .main })) u32 {
     };
 }
 
+fn requestFontSizeX11(gc: x11.GraphicsContext) !zin.XY {
+    {
+        const text_literal = [_]u16{'m'};
+        const text = x11.Slice(u16, [*]const u16){ .ptr = &text_literal, .len = text_literal.len };
+        var msg: [x11.query_text_extents.getLen(text.len)]u8 = undefined;
+        x11.query_text_extents.serialize(&msg, gc.fontable(), text);
+        try zin.platform.global.connection.sendOne(&msg);
+    }
+    const sequence = zin.platform.global.connection.sequence;
+    // NOTE: @sizeOf(QueryTextExtents) is the standard 32-byte header size
+    var reply_buf: [@sizeOf(x11.ServerMsg.QueryTextExtents)]u8 align(4) = undefined;
+    try zin.platform.readFull(zin.platform.global.connection.sock, reply_buf[0..@sizeOf(x11.ServerMsg.Generic)]);
+    {
+        const generic: *x11.ServerMsg.Generic = @ptrCast(&reply_buf);
+        // TODO: check the sequnce as well
+        if (generic.kind != .reply) std.debug.panic(
+            "GetKeyboardMapping failed, expected 'reply' but got '{}': {}",
+            .{
+                generic.kind,
+                generic,
+            },
+        );
+    }
+    const msg: *x11.ServerMsg.QueryTextExtents = @ptrCast(&reply_buf);
+    std.debug.assert(msg.sequence == sequence);
+    return .{
+        .x = msg.overall_width,
+        .y = msg.font_ascent + msg.font_descent,
+    };
+}
+
 fn getFontSize(comptime T: type, dpi: u32, globals: *PlatformGlobals) if (T == i32) zin.XY else XY(T) {
     switch (zin.platform_kind) {
-        .x11 => {
-            std.log.warn("!!!!! getFontSize not implemented on x11, using fake value of 10x20", .{});
-            return .{ .x = 10, .y = 20 };
-        },
+        .x11 => return global.platform.font_size.?,
         .win32 => {
             const hdc = win32.CreateCompatibleDC(null);
             defer if (0 == win32.DeleteDC(hdc)) win32.panicWin32("DeleteDC", win32.GetLastError());
@@ -635,7 +669,8 @@ pub fn getViewRowCount() u32 {
             const dpi = win32.dpiFromHwnd(zin.staticWindow(.main).hwnd());
             break :blk getFontSize(i32, dpi, &global.platform).y;
         },
-        else => @panic("todo"),
+        .x11 => global.platform.font_size.?.y,
+        .macos => @panic("todo"),
     };
     const status_top = client_size.y - font_height;
     return @intCast(@divTrunc(status_top, font_height));
@@ -989,6 +1024,7 @@ fn oom(e: error{OutOfMemory}) noreturn {
 const builtin = @import("builtin");
 const std = @import("std");
 const zin = @import("zin");
+const x11 = zin.platform.x11;
 const win32 = zin.platform.win32;
 
 const cimport = @cImport({
