@@ -6,8 +6,8 @@
 
     .dependencies = .{
         .zin = .{
-            .url = "git+https://github.com/marler8997/zin#98f943111b533aafac032fb5992aa7ea642a3e41",
-            .hash = "zin-0.0.0-W7QDx9lmAgDILpX7aMBK9Ihl7vd9jMtAg9WlwdIIL3Dc",
+            .url = "git+https://github.com/marler8997/zin#c99e8f0af2810cd7c26d5ec8593c773836816b67",
+            .hash = "zin-0.0.0-W7QDx12dAgAz-FNgm6v4FJKoWZrheJRn_eGgxLcq2_TL",
         },
     },
     .paths = .{

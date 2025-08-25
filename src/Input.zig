@@ -28,11 +28,11 @@ pub const Action = union(enum) {
 // placeholders for keys that currently just act as alias's to other keys
 pub const todo = struct {
     pub const kp_enter = Key.enter;
-    pub const left_shift = null;
-    pub const left_control = Key.control;
-    pub const right_control = Key.control;
-    pub const left_alt = Key.alt;
-    pub const right_alt = Key.alt;
+    pub const shift_left = null;
+    pub const control_left = Key.control;
+    pub const control_right = Key.control;
+    pub const alt_left = Key.alt;
+    pub const alt_right = Key.alt;
     pub const pause = null;
     pub const caps_lock = null;
 
@@ -48,8 +48,8 @@ pub const todo = struct {
     pub const kp_insert = null;
     pub const kp_delete = null;
 
-    pub const left_super = null;
-    pub const right_super = null;
+    pub const super_left = null;
+    pub const super_right = null;
 
     pub const kp_0 = null;
     pub const kp_1 = null;
@@ -94,7 +94,7 @@ pub const todo = struct {
 
     pub const num_lock = null;
     pub const scroll_lock = null;
-    pub const right_shift = null;
+    pub const shift_right = null;
 
     pub const mute_volume = null;
     pub const lower_volume = null;

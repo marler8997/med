@@ -658,96 +658,59 @@ pub fn removeHandle(handle: win32.HANDLE) bool {
 // ================================================================================
 
 fn onKey(e: zin.Key) void {
-    // const key_flags: KeyFlags = @bitCast(@as(u32, @intCast(0xffffffff & lparam)));
-    // const winkey: WinKey = .{
-    //     .vk = @intCast(0xffff & wparam),
-    //     .extended = key_event.win32_extended,
-    // };
     const press_kind: Input.KeyPressKind = switch (e.kind) {
         .up => return,
         .down => .initial,
         .down_repeat => .repeat,
     };
 
-    switch (zin.platform_kind) {
+    var keyboard_state: zin.UnicodeKeyboardState = .init();
+    const mods: Input.KeyMods = blk: switch (zin.platform_kind) {
         .win32 => {
-            var keyboard_state: [256]u8 = undefined;
-            if (0 == win32.GetKeyboardState(&keyboard_state)) win32.panicWin32(
-                "GetKeyboardState",
-                win32.GetLastError(),
-            );
-
-            const mods: Input.KeyMods = .{
-                .control = (0 != keyboard_state[@intFromEnum(win32.VK_CONTROL)] & 0x80),
-                .alt = (0 != (keyboard_state[@intFromEnum(win32.VK_MENU)] & 0x80)),
+            break :blk .{
+                .control = (0 != keyboard_state.array[@intFromEnum(win32.VK_CONTROL)] & 0x80),
+                .alt = (0 != (keyboard_state.array[@intFromEnum(win32.VK_MENU)] & 0x80)),
             };
-            if (keyFromZin(e.vk, e.win32_extended)) |key| {
-                engine.notifyKeyDown(press_kind, .{ .key = key, .mods = mods });
-                return;
-            }
-
-            // release control key when getting the unicode character of this key
-            //const save_control_state = keyboard_state[@intFromEnum(win32.VK_CONTROL)];
-            keyboard_state[@intFromEnum(win32.VK_CONTROL)] = 0;
-
-            const max_char_count = 20;
-            var char_buf: [max_char_count + 1]u16 = undefined;
-            const unicode_result = win32.ToUnicode(
-                @intFromEnum(e.vk),
-                @intFromEnum(e.scan_code),
-                &keyboard_state,
-                @ptrCast(&char_buf),
-                max_char_count,
-                0,
-            );
-
-            if (unicode_result < 0)
-                return; // dead key
-
-            if (unicode_result > max_char_count) {
-                for (char_buf[0..@intCast(unicode_result)], 0..) |codepoint, i| {
-                    std.log.err("UNICODE[{}] 0x{x} {d}", .{ i, codepoint, unicode_result });
-                }
-                return;
-            }
-
-            const extended_suffix: []const u8 = if (e.win32_extended) "E" else "";
-            if (unicode_result == 0) {
-                std.log.warn(
-                    "unknown virtual key {}{s} (0x{x})",
-                    .{ @intFromEnum(e.vk), extended_suffix, @intFromEnum(e.vk) },
-                );
-                return;
-            }
-
-            if (unicode_result != 1) std.debug.panic(
-                "TODO: handle multiple unicode chars from one key (result={})",
-                .{unicode_result},
-            );
-            const key: Input.Key = switch (char_buf[0]) {
-                ' '...'~' => |c| @enumFromInt(@intFromEnum(Input.Key.space) + (c - ' ')),
-                else => |c| {
-                    const a = if (std.math.cast(u8, c)) |a|
-                        (if (std.ascii.isPrint(a)) a else '?')
-                    else
-                        '?';
-                    std.debug.panic("TODO: handle character '{c}' {} 0x{x}", .{ a, c, c });
-                },
-            };
-            engine.notifyKeyDown(press_kind, .{ .key = key, .mods = mods });
         },
-        .macos => std.log.err("todo: support onKey macos", .{}),
-        .x11 => std.log.err("todo: support onKey x11", .{}),
+        .x11 => {
+            std.log.err("TODO: get state of ALT key", .{});
+            break :blk .{
+                .control = e.x11_mask.control,
+                .alt = false,
+            };
+        },
+        else => {
+            std.log.err("TODO: get keyboard mods on this platform!!!", .{});
+            break :blk .{ .control = false, .alt = false };
+        },
+    };
+    if (keyFromZin(e.vk, e.win32_extended)) |key| {
+        engine.notifyKeyDown(press_kind, .{ .key = key, .mods = mods });
+        return;
+    }
+    const utf8 = e.utf8(keyboard_state.ref());
+    for (utf8.slice()) |utf8_byte| {
+        switch (utf8_byte) {
+            ' '...'~' => |ascii_code| {
+                const key: Input.Key = @enumFromInt(@intFromEnum(Input.Key.space) + (ascii_code - ' '));
+                engine.notifyKeyDown(press_kind, .{ .key = key, .mods = mods });
+            },
+            else => |c| {
+                const a = if (std.math.cast(u8, c)) |a|
+                    (if (std.ascii.isPrint(a)) a else '?')
+                else
+                    '?';
+                std.debug.panic("TODO: handle character '{c}' {} 0x{x}", .{ a, c, c });
+            },
+        }
     }
 }
 
 fn keyFromZin(vk: zin.VirtualKey, extended: zin.Win32ExtendedKey) ?Input.Key {
     if (builtin.os.tag == .windows) if (extended) return switch (vk) {
         .@"return" => Input.todo.kp_enter,
-        .control => Input.todo.right_control,
-        .alt => Input.todo.right_alt,
-        .left_super => Input.todo.left_super,
-        .right_super => Input.todo.right_super,
+        .super_left => Input.todo.super_left,
+        .super_right => Input.todo.super_right,
         .page_up => Input.todo.page_up,
         .page_down => Input.todo.page_down,
         .end => Input.todo.end,
@@ -764,17 +727,18 @@ fn keyFromZin(vk: zin.VirtualKey, extended: zin.Win32ExtendedKey) ?Input.Key {
         else => null,
     };
     return switch (vk) {
-        .back => Input.Key.backspace,
+        .backspace => Input.Key.backspace,
         .tab => Input.Key.tab,
         .@"return" => Input.Key.enter,
-        // note: this could be left or right shift
-        .shift => Input.todo.left_shift,
-        .control => Input.todo.left_control,
-        .alt => Input.todo.left_alt,
+        .shift_left => Input.todo.shift_left,
+        .shift_right => Input.todo.shift_right,
+        .control_left => Input.todo.control_left,
+        .control_right => Input.todo.control_right,
+        .alt_left => Input.todo.alt_left,
+        .alt_right => Input.todo.alt_right,
         .pause => Input.todo.pause,
         .caps_lock => Input.todo.caps_lock,
         .escape => Input.Key.escape,
-        .space => Input.Key.space,
         .page_up => Input.todo.kp_page_up,
         .page_down => Input.todo.kp_page_down,
         .end => Input.todo.kp_end,
@@ -787,8 +751,8 @@ fn keyFromZin(vk: zin.VirtualKey, extended: zin.Win32ExtendedKey) ?Input.Key {
         .insert => Input.todo.kp_insert,
         .delete => Input.todo.kp_delete,
 
-        .left_super => Input.todo.left_super,
-        .right_super => Input.todo.right_super,
+        .super_left => Input.todo.super_left,
+        .super_right => Input.todo.super_right,
         .numpad0 => Input.todo.kp_0,
         .numpad1 => Input.todo.kp_1,
         .numpad2 => Input.todo.kp_2,
@@ -831,20 +795,7 @@ fn keyFromZin(vk: zin.VirtualKey, extended: zin.Win32ExtendedKey) ?Input.Key {
         .f23 => Input.todo.f23,
         .f24 => Input.todo.f24,
         .numlock => Input.todo.num_lock,
-        .scroll => Input.todo.scroll_lock,
-        .left_shift => Input.todo.left_shift,
-        .right_shift => Input.todo.right_shift,
-        .left_control => Input.todo.left_control,
-        .right_control => Input.todo.right_control,
-        .left_alt => Input.todo.left_alt,
-        .right_alt => Input.todo.right_alt,
-        .volume_mute => Input.todo.mute_volume,
-        .volume_down => Input.todo.lower_volume,
-        .volume_up => Input.todo.raise_volume,
-        .media_next_track => Input.todo.media_track_next,
-        .media_prev_track => Input.todo.media_track_previous,
-        .media_stop => Input.todo.media_stop,
-        .media_play_pause => Input.todo.media_play_pause,
+        .scroll_lock => Input.todo.scroll_lock,
         else => null,
     };
 }

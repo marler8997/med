@@ -171,7 +171,7 @@ pub fn submitInput(self: *Process) void {
 
         self.addInput("\r\n") catch @panic("oom");
 
-        {
+        if (builtin.os.tag == .windows) {
             var written: u32 = undefined;
             if (0 == win32.WriteFile(
                 impl.stdin.write,
@@ -184,7 +184,8 @@ pub fn submitInput(self: *Process) void {
                 "todo: handle wrote {} bytes out of {}",
                 .{ written, self.command.items.len },
             );
-        }
+        } else @panic("todo: non-windows");
+
         self.command.clearRetainingCapacity();
         self.command_cursor_pos = 0;
     }

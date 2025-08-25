@@ -68,14 +68,14 @@ pub fn init(
     }
 
     return .{
-        .mem = std.os.mmap(
+        .mem = std.posix.mmap(
             null,
             file_size,
             switch (opt.mode) {
-                .read_only => std.os.PROT.READ,
-                .read_write => std.os.PROT.READ | std.os.PROT.WRITE,
+                .read_only => std.posix.PROT.READ,
+                .read_write => std.posix.PROT.READ | std.posix.PROT.WRITE,
             },
-            std.os.MAP.PRIVATE,
+            .{ .TYPE = .PRIVATE },
             file.handle,
             0,
         ) catch |err| return on_err.report(
@@ -93,6 +93,6 @@ pub fn unmap(self: MappedFile) void {
             std.os.windows.CloseHandle(self.mapping);
         }
     } else {
-        std.os.munmap(self.mem);
+        std.posix.munmap(self.mem);
     }
 }
