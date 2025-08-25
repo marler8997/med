@@ -71,6 +71,7 @@ const StaticWindowId = enum {
     pub fn getConfig(self: StaticWindowId) zin.WindowConfigData {
         return switch (self) {
             .main => .{
+                .window_size_events = true,
                 .key_events = true,
                 .mouse_events = true,
                 .timers = .none,
@@ -248,6 +249,7 @@ fn onWmQuit(wparam: win32.WPARAM) noreturn {
 fn callback(cb: zin.Callback(.{ .static = .main })) void {
     switch (cb) {
         .close => zin.quitMainLoop(),
+        .window_size => {}, // invalidate should already happen?
         .draw => |*d| paint(d),
         .key => |key| onKey(key),
         .mouse => |mouse| {
