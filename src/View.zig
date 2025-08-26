@@ -133,6 +133,11 @@ pub fn cursorUp(self: *View) bool {
     if (self.cursor_pos) |*cursor_pos| {
         if (cursor_pos.y == 0) return false;
         cursor_pos.y -= 1;
+        if (cursor_pos.y < self.viewport_pos.y) {
+            // NOTE: emacs will page up so the cursor is in the center, but,
+            //       the user could just use control-l to do that so...?
+            self.viewport_pos.y = cursor_pos.y;
+        }
         return true;
     }
     return false;
@@ -142,6 +147,13 @@ pub fn cursorUp(self: *View) bool {
 pub fn cursorDown(self: *View) bool {
     if (self.cursor_pos) |*cursor_pos| {
         cursor_pos.y += 1;
+
+        const view_row_count = hook.getViewRowCount();
+        if (cursor_pos.y >= self.viewport_pos.y + view_row_count) {
+            // NOTE: emacs will page down so the cursor is in the center, but,
+            //       the user could just use control-l to do that so...?
+            self.viewport_pos.y = cursor_pos.y + 1 - view_row_count;
+        }
         return true;
     }
     return false;
