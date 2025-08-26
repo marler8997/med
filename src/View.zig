@@ -189,6 +189,23 @@ pub fn cursorLineEnd(self: *View) bool {
     return false;
 }
 
+pub fn @"scroll-to-cursor"(self: *View) bool {
+    const cursor_pos = self.cursor_pos orelse return false;
+
+    // for now we'll just center
+    const view_row_count = hook.getViewRowCount();
+    const half_row_count = @divTrunc(view_row_count, 2);
+
+    const new_viewport_y = blk: {
+        if (cursor_pos.y <= half_row_count) break :blk 0;
+        break :blk cursor_pos.y - half_row_count;
+    };
+
+    if (self.viewport_pos.y == new_viewport_y) return false;
+    self.viewport_pos.y = new_viewport_y;
+    return true;
+}
+
 pub fn @"page-up"(self: *View) bool {
     if (self.viewport_pos.y == 0) {
         std.log.info("page-up: already at top", .{});

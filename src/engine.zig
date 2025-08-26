@@ -171,6 +171,7 @@ const Dialog = struct {
             .cursor_line_start,
             .cursor_line_end,
             => {}, // ignore
+            .@"scroll-to-cursor",
             .@"page-up",
             .@"page-down",
             => {}, // ignore
@@ -307,6 +308,7 @@ fn handleAction(action: Input.Action) void {
             .cursor_line_start,
             .cursor_line_end,
             => {}, // ignore
+            .@"scroll-to-cursor",
             .@"page-up",
             .@"page-down",
             => {}, // ignore
@@ -551,6 +553,22 @@ fn handleAction(action: Input.Action) void {
                 },
                 .file => |view| {
                     if (view.cursorLineEnd()) {
+                        hook.viewModified();
+                    }
+                },
+            }
+        },
+        .@"scroll-to-cursor" => {
+            if (global_open_file_prompt) |_| {
+                std.log.info("should scroll-to-cursor do something in the open file prompt?", .{});
+            } else switch (global_current_pane) {
+                .welcome => {},
+                .process => |process| {
+                    _ = process;
+                    std.log.info("todo: implement scroll-to-cursor for process", .{});
+                },
+                .file => |view| {
+                    if (view.@"scroll-to-cursor"()) {
                         hook.viewModified();
                     }
                 },
