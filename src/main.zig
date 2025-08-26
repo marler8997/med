@@ -9,6 +9,8 @@ const global = struct {
 const PlatformGlobals = switch (zin.platform_kind) {
     .win32 => PlatformGlobalsWin32,
     .x11 => struct {
+        alt_left_down: bool = false,
+        alt_right_down: bool = false,
         font_size: ?zin.XY = null,
     },
     else => struct {},
@@ -700,8 +702,25 @@ pub fn removeHandle(handle: win32.HANDLE) bool {
 // ================================================================================
 
 fn onKey(e: zin.Key) void {
+    switch (zin.platform_kind) {
+        .x11 => switch (e.vk) {
+            .alt_left => global.platform.alt_left_down = switch (e.kind) {
+                .up => false,
+                .down, .down_repeat => true,
+            },
+            .alt_right => global.platform.alt_right_down = switch (e.kind) {
+                .up => false,
+                .down, .down_repeat => true,
+            },
+            else => {},
+        },
+        .macos, .win32 => {},
+    }
+
     const press_kind: Input.KeyPressKind = switch (e.kind) {
-        .up => return,
+        .up => {
+            return;
+        },
         .down => .initial,
         .down_repeat => .repeat,
     };
@@ -714,12 +733,9 @@ fn onKey(e: zin.Key) void {
                 .alt = (0 != (keyboard_state.array[@intFromEnum(win32.VK_MENU)] & 0x80)),
             };
         },
-        .x11 => {
-            std.log.err("TODO: get state of ALT key", .{});
-            break :blk .{
-                .control = e.x11_mask.control,
-                .alt = false,
-            };
+        .x11 => break :blk .{
+            .control = e.x11_mask.control,
+            .alt = global.platform.alt_left_down or global.platform.alt_right_down,
         },
         else => {
             std.log.err("TODO: get keyboard mods on this platform!!!", .{});
