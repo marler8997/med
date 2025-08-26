@@ -193,6 +193,32 @@ pub fn cursorLineEnd(self: *View) bool {
     return false;
 }
 
+pub fn @"cursor-file-start"(self: *View) bool {
+    if (self.cursor_pos) |*cursor_pos| {
+        if (cursor_pos.y == 0 and cursor_pos.x == 0) return false;
+    }
+    self.cursor_pos = .{ .x = 0, .y = 0 };
+    self.viewport_pos = .{ .x = 0, .y = 0 };
+    return true;
+}
+
+pub fn @"cursor-file-end"(self: *View) bool {
+    if (self.rows.items.len == 0) return false;
+    const last_row = self.rows.items.len - 1;
+    const last_column = self.rows.items[last_row].getLen();
+    if (self.cursor_pos) |*cursor_pos| {
+        if (cursor_pos.y == last_row and cursor_pos.x == last_column) return false;
+    }
+    self.cursor_pos = .{ .x = @intCast(last_column), .y = @intCast(last_row) };
+    const view_row_count = hook.getViewRowCount();
+    if (view_row_count > last_row + 1) {
+        self.viewport_pos.y = 0;
+    } else {
+        self.viewport_pos.y = @intCast(last_row + 1 - view_row_count);
+    }
+    return true;
+}
+
 pub fn @"scroll-to-cursor"(self: *View) bool {
     const cursor_pos = self.cursor_pos orelse return false;
 

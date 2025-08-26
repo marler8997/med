@@ -12,6 +12,8 @@ pub const Action = union(enum) {
     cursor_down,
     cursor_line_start,
     cursor_line_end,
+    @"cursor-file-start",
+    @"cursor-file-end",
     @"scroll-to-cursor",
     @"page-up",
     @"page-down",
@@ -395,6 +397,8 @@ pub fn evaluateKeybind(
         1 => switch (keybind.buf[0].mods.combo()) {
             .alt_only => switch (keybind.buf[0].key) {
                 .v => return .{ .action = .@"page-up" },
+                .open_angle_bracket => return .{ .action = .@"cursor-file-start" },
+                .close_angle_bracket => return .{ .action = .@"cursor-file-end" },
                 else => {},
             },
             .control_alt => {},

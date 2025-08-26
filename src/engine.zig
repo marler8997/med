@@ -170,6 +170,8 @@ const Dialog = struct {
             .cursor_down,
             .cursor_line_start,
             .cursor_line_end,
+            .@"cursor-file-start",
+            .@"cursor-file-end",
             => {}, // ignore
             .@"scroll-to-cursor",
             .@"page-up",
@@ -307,6 +309,8 @@ fn handleAction(action: Input.Action) void {
             .cursor_down,
             .cursor_line_start,
             .cursor_line_end,
+            .@"cursor-file-start",
+            .@"cursor-file-end",
             => {}, // ignore
             .@"scroll-to-cursor",
             .@"page-up",
@@ -553,6 +557,38 @@ fn handleAction(action: Input.Action) void {
                 },
                 .file => |view| {
                     if (view.cursorLineEnd()) {
+                        hook.viewModified();
+                    }
+                },
+            }
+        },
+        .@"cursor-file-start" => {
+            if (global_open_file_prompt) |_| {
+                std.log.info("should cursor-file-start do something in the open file prompt?", .{});
+            } else switch (global_current_pane) {
+                .welcome => {},
+                .process => |process| {
+                    _ = process;
+                    std.log.info("todo: implement cursor-file-start for process", .{});
+                },
+                .file => |view| {
+                    if (view.@"cursor-file-start"()) {
+                        hook.viewModified();
+                    }
+                },
+            }
+        },
+        .@"cursor-file-end" => {
+            if (global_open_file_prompt) |_| {
+                std.log.info("should cursor-file-end do something in the open file prompt?", .{});
+            } else switch (global_current_pane) {
+                .welcome => {},
+                .process => |process| {
+                    _ = process;
+                    std.log.info("todo: implement cursor-file-end for process", .{});
+                },
+                .file => |view| {
+                    if (view.@"cursor-file-end"()) {
                         hook.viewModified();
                     }
                 },
