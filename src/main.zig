@@ -324,8 +324,8 @@ fn paint(d: *const zin.Draw(.{ .static = .main })) void {
             for (viewport_rows, 0..) |row, row_index_usize| {
                 const row_index: i32 = @intCast(row_index_usize);
                 const y: i32 = @intCast(row_index * font_size.y);
-                const row_str = row.getViewport(view.*, viewport_size.x);
-                drawFileRow(d, mode, row_str, 0, y, font_size.x);
+                const row_view = row.getView(view.*, viewport_size.x);
+                drawFileRow(d, mode, row_view, 0, y, font_size.x);
             }
         },
     }
@@ -371,21 +371,28 @@ fn paint(d: *const zin.Draw(.{ .static = .main })) void {
     }
 }
 
-fn drawFileRow(d: *const zin.Draw(.{ .static = .main }), mode: FileMode, row_str: []const u8, x: i32, y: i32, font_width: i32) void {
+fn drawFileRow(
+    d: *const zin.Draw(.{ .static = .main }),
+    mode: FileMode,
+    row_view: RowView,
+    x: i32,
+    y: i32,
+    font_width: i32,
+) void {
     // NOTE: for now we only support ASCII
     switch (mode) {
         .default => {
-            d.text(row_str, x, y, theme.fg);
+            d.text(row_view.full[row_view.index..row_view.limit], x, y, theme.fg);
         },
         .zig => {
-            var offset: usize = 0;
-            while (offset < row_str.len) {
-                const token = tokenizeZig(row_str, offset);
+            var offset: usize = row_view.index;
+            while (offset < row_view.limit) {
+                const token = tokenizeZig(row_view.full, offset);
                 if (token.end > offset) {
                     // const token_kind = tokenKindFromZig(token.tag);
                     d.text(
-                        row_str[offset..token.end],
-                        x + (@as(i32, @intCast(offset)) * font_width),
+                        row_view.full[offset..token.end],
+                        x + (@as(i32, @intCast(offset - row_view.index)) * font_width),
                         y,
                         token.kind.color(),
                     );
@@ -1036,4 +1043,5 @@ const theme = @import("theme.zig");
 const Input = @import("Input.zig");
 const XY = @import("xy.zig").XY;
 const FileMode = @import("filemode.zig").FileMode;
+const RowView = @import("RowView.zig");
 const zigtokenizer = @import("zigtokenizer.zig");

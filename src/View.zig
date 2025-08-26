@@ -5,6 +5,7 @@ const hook = @import("hook.zig");
 const FileMode = @import("filemode.zig").FileMode;
 const MappedFile = @import("MappedFile.zig");
 const RefString = @import("RefString.zig");
+const RowView = @import("RowView.zig");
 const XY = @import("xy.zig").XY;
 
 arena_instance: std.heap.ArenaAllocator,
@@ -71,14 +72,17 @@ pub const Row = union(enum) {
             .array_list_backed => |al| al.items,
         };
     }
-    pub fn getViewport(self: Row, view: View, viewport_width: usize) []u8 {
-        const slice = switch (self) {
+    pub fn getView(self: Row, view: View, viewport_width: usize) RowView {
+        const full = switch (self) {
             .file_backed => |r| view.file.?.map.mem[r.offset..r.limit],
             .array_list_backed => |al| al.items,
         };
-        if (view.viewport_pos.x >= slice.len) return &[0]u8{};
-        const avail = slice.len - view.viewport_pos.x;
-        return slice[view.viewport_pos.x..][0..@min(avail, viewport_width)];
+        if (view.viewport_pos.x >= full.len) return .{ .full = &[0]u8{}, .index = 0, .limit = 0 };
+        return .{
+            .full = full,
+            .index = view.viewport_pos.x,
+            .limit = @min(full.len, view.viewport_pos.x + viewport_width),
+        };
     }
 };
 
