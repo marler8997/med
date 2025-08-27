@@ -171,7 +171,10 @@ fn main2() !void {
     defer zin.staticWindow(.main).unregisterClass();
     try zin.staticWindow(.main).create(.{
         .title = "Med",
-        .size = .{ .window = initial_placement.resolveSize(.{ .x = 400, .y = 800 }) },
+        .size = switch (zin.platform_kind) {
+            .win32 => .{ .window_pixels = initial_placement.resolveSize(.{ .x = 400, .y = 800 }) },
+            else => .{ .window_points = initial_placement.resolveSize(.{ .x = 400, .y = 800 }) },
+        },
         .pos = initial_placement.pos,
     });
     // TODO: not working for x11 yet, closing the window
