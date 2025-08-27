@@ -2,8 +2,8 @@ const View = @This();
 
 const std = @import("std");
 const hook = @import("hook.zig");
+const highlight = @import("highlight.zig");
 const Error = @import("Error.zig");
-const FileMode = @import("filemode.zig").FileMode;
 const MappedFile = @import("MappedFile.zig");
 const RefString = @import("RefString.zig");
 const RowView = @import("RowView.zig");
@@ -34,16 +34,24 @@ pub fn arena(self: *View) std.mem.Allocator {
     return self.arena_instance.allocator();
 }
 
+const file_ext_map = std.StaticStringMap(highlight.Mode).initComptime(.{
+    .{ ".zig", .zig },
+    .{ ".c", .c },
+    .{ ".cc", .c },
+    .{ ".cpp", .c },
+});
+
 pub const OpenFile = struct {
     map: MappedFile,
     name: RefString,
-    mode: FileMode,
+    mode: ?highlight.Mode,
     pub fn initAndNameAddRef(map: MappedFile, name: RefString) OpenFile {
         name.addRef();
+        const extension = std.fs.path.extension(name.slice);
         return .{
             .map = map,
             .name = name,
-            .mode = if (std.mem.endsWith(u8, name.slice, ".zig")) .zig else .default,
+            .mode = file_ext_map.get(extension) orelse null,
         };
     }
     pub fn close(self: OpenFile) void {

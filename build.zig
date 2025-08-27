@@ -18,6 +18,7 @@ pub fn build(b: *std.Build) void {
     const zin = b.dependency("zin", .{
         .x11 = x11,
     }).module("zin");
+    const aro = b.dependency("aro", .{}).module("aro");
 
     const exe = b.addExecutable(.{
         .name = "med",
@@ -27,6 +28,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "zin", .module = zin },
+                .{ .name = "aro", .module = aro },
             },
             .single_threaded = true,
         }),

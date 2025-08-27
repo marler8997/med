@@ -9,6 +9,10 @@
             .url = "git+https://github.com/marler8997/zin#abd686f3312c3d320d1a19b628e1682c906b92b9",
             .hash = "zin-0.0.0-W7QDx2WdAgApYKnPITdRHBuTHSYisXl4keDhJBfUR6pq",
         },
+        .aro = .{
+            .url = "git+https://github.com/Vexu/arocc.git#dc5d3c41ae31d8ac24982571e7fc1e267516cc68",
+            .hash = "aro-0.0.0-JSD1QjwvJwDKXWMapsv2KZymvci1DAiheTPj_Jyx21Oi",
+        },
     },
     .paths = .{
         "build.zig",

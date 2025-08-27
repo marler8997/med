@@ -322,7 +322,7 @@ fn paint(d: *const zin.Draw(.{ .static = .main })) void {
                     d.rect(.ltwh(viewport_pos.x, viewport_pos.y, font_size.x, font_size.y), theme.cursor);
                 }
             }
-            const mode: FileMode = if (view.file) |f| f.mode else .default;
+            const mode: ?highlight.Mode = if (view.file) |f| f.mode else null;
             for (viewport_rows, 0..) |row, row_index_usize| {
                 const row_index: i32 = @intCast(row_index_usize);
                 const y: i32 = @intCast(row_index * font_size.y);
@@ -375,35 +375,32 @@ fn paint(d: *const zin.Draw(.{ .static = .main })) void {
 
 fn drawFileRow(
     d: *const zin.Draw(.{ .static = .main }),
-    mode: FileMode,
+    maybe_mode: ?highlight.Mode,
     row_view: RowView,
     x: i32,
     y: i32,
     font_width: i32,
 ) void {
     // NOTE: for now we only support ASCII
-    switch (mode) {
-        .default => {
-            d.text(row_view.full[row_view.index..row_view.limit], x, y, theme.fg);
-        },
-        .zig => {
-            var offset: usize = row_view.index;
-            while (offset < row_view.limit) {
-                const token = highlight.zig.tokenize(row_view.full, offset);
-                if (token.end > offset) {
-                    // const token_kind = tokenKindFromZig(token.tag);
-                    d.text(
-                        row_view.full[offset..token.end],
-                        x + (@as(i32, @intCast(offset - row_view.index)) * font_width),
-                        y,
-                        token.kind.color(),
-                    );
-                    offset = token.end;
-                } else {
-                    offset += 1; // skip this one char I guess
-                }
-            }
-        },
+    const mode = maybe_mode orelse {
+        d.text(row_view.full[row_view.index..row_view.limit], x, y, theme.fg);
+        return;
+    };
+    var offset: usize = row_view.index;
+    while (offset < row_view.limit) {
+        const token = highlight.tokenize(mode, row_view.full, offset);
+        if (token.end > offset) {
+            // const token_kind = tokenKindFromZig(token.tag);
+            d.text(
+                row_view.full[offset..token.end],
+                x + (@as(i32, @intCast(offset - row_view.index)) * font_width),
+                y,
+                token.kind.color(),
+            );
+            offset = token.end;
+        } else {
+            offset += 1; // skip this one char I guess
+        }
     }
 }
 
@@ -939,5 +936,4 @@ const theme = @import("theme.zig");
 const Input = @import("Input.zig");
 const XY = @import("xy.zig").XY;
 const Error = @import("Error.zig");
-const FileMode = @import("filemode.zig").FileMode;
 const RowView = @import("RowView.zig");

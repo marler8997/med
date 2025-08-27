@@ -1,7 +1,4 @@
-pub fn tokenize(row_str: []const u8, start: usize) struct {
-    kind: highlight.TokenKind,
-    end: usize,
-} {
+pub fn tokenize(row_str: []const u8, start: usize) highlight.Token {
     var tokenizer = zigtokenizer.Tokenizer{ .buffer = row_str, .index = start };
     const token = tokenizer.next();
     std.debug.assert(token.loc.start >= start);
