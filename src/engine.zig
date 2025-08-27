@@ -185,7 +185,7 @@ const Dialog = struct {
                     hook.dialogModified();
                 }
             }, // ignore
-            .kill_line => {
+            .@"kill-line" => {
                 std.log.err("TODO: kill line", .{});
             }, // ignore
             .open_file => {}, // ignore
@@ -319,7 +319,7 @@ fn handleAction(action: Input.Action) void {
             .tab => {}, // ignore
             .delete => {}, // ignore
             .backspace => {}, // ignore
-            .kill_line => {}, // ignore
+            .@"kill-line" => {}, // ignore
             .open_file => {}, // ignore
             .save_file => {}, // ignore
             .@"open-process" => {}, // ignore
@@ -690,7 +690,7 @@ fn handleAction(action: Input.Action) void {
                 },
             }
         },
-        .kill_line => {
+        .@"kill-line" => {
             if (global_open_file_prompt) |_| {
                 @panic("todo: kill-line while opening file");
             } else switch (global_current_pane) {
@@ -699,7 +699,7 @@ fn handleAction(action: Input.Action) void {
                     hook.processModified();
                 },
                 .file => |view| {
-                    if (view.killLine()) {
+                    if (view.@"kill-line"()) {
                         hook.viewModified();
                     }
                 },

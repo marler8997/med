@@ -697,6 +697,58 @@ pub fn removeHandle(handle: win32.HANDLE) bool {
     _ = handle;
     @panic("todo: implement removeHandle");
 }
+
+pub fn clipboardSetFmt(out_err: *Error, comptime fmt: []const u8, args: anytype) error{Error}!void {
+    switch (zin.platform_kind) {
+        .win32 => {
+            if (0 == win32.OpenClipboard(null)) return out_err.setWin32(
+                "OpenClipboard",
+                win32.GetLastError(),
+            );
+            defer if (0 == win32.CloseClipboard()) win32.panicWin32(
+                "CloseClipboard",
+                win32.GetLastError(),
+            );
+            if (0 == win32.EmptyClipboard()) return out_err.setWin32(
+                "EmptyClipboard",
+                win32.GetLastError(),
+            );
+
+            const fmt_len = std.fmt.count(fmt, args);
+            const hmem = win32.GlobalAlloc(.{ .MEM_MOVEABLE = 1 }, fmt_len + 1);
+            if (hmem == 0) return out_err.setWin32(
+                "GlobalAlloc",
+                win32.GetLastError(),
+            );
+            var hmem_owned = true;
+            defer if (hmem_owned) {
+                if (0 != win32.GlobalFree(hmem)) win32.panicWin32("GlobalFree", win32.GetLastError());
+            };
+
+            {
+                const locked = win32.GlobalLock(hmem) orelse win32.panicWin32("GlobalLock", win32.GetLastError());
+                defer if (0 != win32.GlobalUnlock(hmem)) win32.panicWin32("GlobalUnlock", win32.GetLastError());
+                const ptr: [*]u8 = @ptrCast(locked);
+                ptr[fmt_len] = 0xaa;
+                {
+                    const result = std.fmt.bufPrint(ptr[0..fmt_len], fmt, args) catch unreachable;
+                    std.debug.assert(result.len == fmt_len);
+                }
+                std.debug.assert(ptr[fmt_len] == 0xaa);
+                ptr[fmt_len] = 0;
+                std.log.info("Formatted '{}'", .{std.zig.fmtEscapes(ptr[0 .. fmt_len + 1])});
+            }
+
+            if (null == win32.SetClipboardData(
+                @intFromEnum(win32.CF_TEXT),
+                @ptrFromInt(@as(usize, @bitCast(hmem))),
+            )) return out_err.setWin32("SetClipboardData", win32.GetLastError());
+            hmem_owned = false;
+        },
+        .x11 => return out_err.setAny("clipboardSetX11", error.NotImplemented),
+        .macos => return out_err.setAny("clipboardSetMacos", error.NotImplemented),
+    }
+}
 // ================================================================================
 // End of the interface for the engine to use
 // ================================================================================
@@ -1058,6 +1110,7 @@ const engine = @import("engine.zig");
 const theme = @import("theme.zig");
 const Input = @import("Input.zig");
 const XY = @import("xy.zig").XY;
+const Error = @import("Error.zig");
 const FileMode = @import("filemode.zig").FileMode;
 const RowView = @import("RowView.zig");
 const zigtokenizer = @import("zigtokenizer.zig");

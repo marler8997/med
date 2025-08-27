@@ -2,6 +2,7 @@ const View = @This();
 
 const std = @import("std");
 const hook = @import("hook.zig");
+const Error = @import("Error.zig");
 const FileMode = @import("filemode.zig").FileMode;
 const MappedFile = @import("MappedFile.zig");
 const RefString = @import("RefString.zig");
@@ -354,10 +355,43 @@ pub fn deleteToEndOfLine(self: *View, row_index: usize, line_offset: usize) erro
     }
 }
 
-pub fn killLine(self: *View) bool {
-    _ = self;
-    std.log.err("killLine not implemented", .{});
-    return false;
+pub fn @"kill-line"(self: *View) bool {
+    const cursor_pos = self.cursor_pos orelse return false;
+    if (cursor_pos.x == 0) {
+        if (cursor_pos.y >= self.rows.items.len) return false;
+
+        const row = &self.rows.items[cursor_pos.y];
+        if (cursor_pos.y + 1 == self.rows.items.len) {
+            if (row.getLen() == 0) {
+                std.log.info("cannot kill last empty line", .{});
+                return false;
+            }
+        }
+
+        if (row.getLen() == 0) {
+            switch (row.*) {
+                .file_backed => {},
+                .array_list_backed => |*al| al.deinit(self.arena()),
+            }
+            _ = self.rows.orderedRemove(cursor_pos.y);
+            return true;
+        }
+
+        var err: Error = undefined;
+        hook.clipboardSetFmt(&err, "{s}\n", .{row.getSlice(self.file)}) catch {
+            // TODO: how should we handle this
+            std.log.err("set clipboard failed because {}", .{err});
+            return false;
+        };
+        switch (row.*) {
+            .file_backed => row.* = .{ .array_list_backed = .{} },
+            .array_list_backed => |*al| al.clearRetainingCapacity(),
+        }
+        return true;
+    } else {
+        std.log.err("TODO: implement kill-line for a partial line", .{});
+        return false;
+    }
 }
 
 pub fn hasChanges(self: *View, normalized: *bool) bool {

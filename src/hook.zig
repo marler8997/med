@@ -12,4 +12,6 @@ pub const getViewRowCount = main.getViewRowCount;
 pub const addHandle = main.addHandle;
 pub const removeHandle = main.removeHandle;
 
+pub const clipboardSetFmt = main.clipboardSetFmt;
+
 const main = @import("main.zig");
