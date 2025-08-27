@@ -3,7 +3,10 @@ const Error = @This();
 what: [:0]const u8,
 code: union(enum) {
     any: anyerror,
-    win32: win32.WIN32_ERROR,
+    win32: switch (zin.platform_kind) {
+        .win32 => win32.WIN32_ERROR,
+        else => void,
+    },
 },
 
 pub fn setAny(out_err: *Error, what: [:0]const u8, any: anyerror) error{Error} {
