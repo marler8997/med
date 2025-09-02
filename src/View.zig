@@ -118,6 +118,16 @@ pub fn getRowSlice(self: View, row_index: usize) []u8 {
     return self.rows.items[row_index].getSlice(self.file);
 }
 
+pub fn moveCursor(self: *View, new_pos: XY(u32)) bool {
+    if (self.cursor_pos) |pos| {
+        if (pos.x == new_pos.x and pos.y == new_pos.y) return false;
+    }
+    self.cursor_pos = new_pos;
+    const view_row_count = hook.getViewRowCount();
+    _ = view_row_count;
+    @panic("todo: move view to cursor");
+}
+
 // returns true if it was able to move the cursor backward
 pub fn cursorBack(self: *View) bool {
     if (self.cursor_pos) |*cursor_pos| {
@@ -400,6 +410,40 @@ pub fn @"kill-line"(self: *View) bool {
         std.log.err("TODO: implement kill-line for a partial line", .{});
         return false;
     }
+}
+
+fn findString(self: *View, string: []const u8, start: XY(u32), end: XY(u32)) ?XY(u32) {
+    if (end.x != 0) @panic("todo");
+    const start_row = blk: {
+        if (start.x != 0) @panic("todo");
+        break :blk start.y;
+    };
+    for (start_row..end.y) |row_index| {
+        const slice = self.rows.items[row_index].getSlice(self.file);
+        if (std.mem.indexOf(u8, slice, string)) |col| return .{ .x = @intCast(col), .y = @intCast(row_index) };
+    }
+    return null;
+}
+
+pub fn findStringFromCursor(self: *View, string: []const u8) ?XY(u32) {
+    const cursor_pos = self.cursor_pos orelse return self.findString(
+        string,
+        .{ .x = 0, .y = 0 },
+        .{ .x = std.math.maxInt(u32), .y = @intCast(self.rows.items.len) },
+    );
+
+    if (self.findString(
+        string,
+        .{ .x = cursor_pos.x, .y = cursor_pos.y },
+        .{ .x = std.math.maxInt(u32), .y = @intCast(self.rows.items.len) },
+    )) |match| return match;
+
+    if (cursor_pos.y > 0 or cursor_pos.y > 0) return self.findString(
+        string,
+        .{ .x = 0, .y = 0 },
+        .{ .x = cursor_pos.x, .y = cursor_pos.y },
+    );
+    return null;
 }
 
 pub fn hasChanges(self: *View, normalized: *bool) bool {
