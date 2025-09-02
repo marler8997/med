@@ -7,7 +7,7 @@ pub const processModified = main.processModified;
 pub const viewModified = main.viewModified;
 pub const paneModified = main.paneModified;
 pub const beep = main.beep;
-pub const getViewRowCount = main.getViewRowCount;
+pub const getViewCellCount = main.getViewCellCount;
 
 pub const addHandle = main.addHandle;
 pub const removeHandle = main.removeHandle;

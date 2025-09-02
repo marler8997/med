@@ -41,6 +41,17 @@ pub var global_current_pane: Pane = .welcome;
 pub var global_err_msg: ?RefString = null;
 pub var global_open_file_prompt: ?OpenFilePrompt = null;
 pub var global_dialog: ?Dialog = null;
+pub const max_search = 100;
+pub var global_mode: union(enum) {
+    normal,
+    search: struct {
+        start: struct {
+            cursor_pos: ?XY(u32),
+            viewport_pos: XY(u32),
+        },
+        buffer: std.BoundedArray(u8, max_search),
+    },
+} = .normal;
 
 pub const OpenFilePrompt = struct {
     const max_path_len = 2048;
@@ -164,6 +175,7 @@ const Dialog = struct {
                     },
                 }
             },
+            .search,
             .cursor_back,
             .cursor_forward,
             .cursor_up,
@@ -303,6 +315,7 @@ fn handleAction(action: Input.Action) void {
                 global_err_msg = null;
                 hook.errModified();
             },
+            .search,
             .cursor_back,
             .cursor_forward,
             .cursor_up,
@@ -329,6 +342,13 @@ fn handleAction(action: Input.Action) void {
         return;
     }
 
+    switch (global_mode) {
+        .search => handleActionModeSearch(action),
+        .normal => handleActionModeNormal(action),
+    }
+}
+
+fn handleActionModeNormal(action: Input.Action) void {
     switch (action) {
         .add_char => |ascii_code| {
             if (global_open_file_prompt) |*prompt| {
@@ -468,6 +488,25 @@ fn handleAction(action: Input.Action) void {
                 .welcome => {},
                 .process => {},
                 .file => {},
+            }
+        },
+        .search => {
+            if (global_open_file_prompt) |_| {
+                std.log.err("TODo: implement search for open file prompt", .{});
+            } else switch (global_current_pane) {
+                .welcome => {},
+                .process => {
+                    std.log.err("TODO: implement search for process pane", .{});
+                },
+                .file => |view| {
+                    global_mode = .{ .search = .{
+                        .start = .{
+                            .cursor_pos = view.cursor_pos,
+                            .viewport_pos = view.viewport_pos,
+                        },
+                        .buffer = .{},
+                    } };
+                },
             }
         },
         .cursor_back => {
@@ -731,6 +770,110 @@ fn handleAction(action: Input.Action) void {
         },
         .kill_pane => @"kill-pane"(.{ .prompt_unsaved_changes = true }),
         .quit => hook.quit(),
+    }
+}
+
+fn handleActionModeSearch(action: Input.Action) void {
+    if (global_open_file_prompt) |_| {
+        std.log.warn("TODO: support search while opening file", .{});
+        global_mode = .normal;
+        handleActionModeNormal(action);
+        return;
+    }
+
+    const file_view = switch (global_current_pane) {
+        .welcome => {
+            std.log.info("search not supported in welcome window", .{});
+            global_mode = .normal;
+            handleActionModeNormal(action);
+            return;
+        },
+        .process => {
+            std.log.err("TODO: support search in process pane", .{});
+            global_mode = .normal;
+            handleActionModeNormal(action);
+            return;
+        },
+        .file => |view| view,
+    };
+
+    switch (action) {
+        .add_char => |ascii_code| {
+            if (global_mode.search.buffer.len == 0) {
+                global_mode.search.buffer.buffer[0] = ascii_code;
+                global_mode.search.buffer.len = 1;
+            } else {
+                if (global_mode.search.buffer.len == global_mode.search.buffer.buffer.len) {
+                    std.log.err("search too big!", .{});
+                } else {
+                    global_mode.search.buffer.buffer[global_mode.search.buffer.len] = ascii_code;
+                    global_mode.search.buffer.len += 1;
+                    std.log.err("TODO: add character to search", .{});
+                }
+            }
+
+            // find next instance of this string
+            const start = if (global_mode.search.start.cursor_pos) |pos| pos else global_mode.search.start.viewport_pos;
+            if (file_view.findStringFrom(global_mode.search.buffer.slice(), start)) |loc| {
+                if (file_view.moveCursor(loc)) {
+                    hook.viewModified();
+                }
+            }
+        },
+        .enter => {
+            global_mode = .normal;
+            hook.viewModified();
+        },
+        .@"keyboard-quit" => {
+            file_view.cursor_pos = global_mode.search.start.cursor_pos;
+            file_view.viewport_pos = global_mode.search.start.viewport_pos;
+            global_mode = .normal;
+            hook.viewModified();
+        },
+        .search => {
+            std.log.err("TODO: move cursor to next search match", .{});
+        },
+        .cursor_back,
+        .cursor_forward,
+        .cursor_up,
+        .cursor_down,
+        .cursor_line_start,
+        .cursor_line_end,
+        .@"cursor-file-start",
+        .@"cursor-file-end",
+        => {
+            global_mode = .normal;
+            handleActionModeNormal(action);
+        },
+        .@"scroll-to-cursor" => handleActionModeNormal(action),
+        .@"page-up",
+        .@"page-down",
+        => {
+            global_mode = .normal;
+            handleActionModeNormal(action);
+        },
+        .tab => {
+            std.log.err("TODO: handle TAB in search mode", .{});
+        },
+        .delete => {
+            std.log.err("TODO: handle DELETE in search mode", .{});
+        },
+        .backspace => {
+            // if (global_mode.search.buffer.len > 0) {
+            //     global_mode.search.buffer.len -= 1;
+            // }
+            std.log.err("TODO: handle backspace in search mode", .{});
+        },
+        .@"kill-line",
+        .open_file,
+        .save_file,
+        .@"open-process",
+        .kill_pane,
+        .quit,
+        => {
+            global_mode = .normal;
+            handleActionModeNormal(action);
+        },
     }
 }
 

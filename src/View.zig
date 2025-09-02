@@ -118,6 +118,23 @@ pub fn getRowSlice(self: View, row_index: usize) []u8 {
     return self.rows.items[row_index].getSlice(self.file);
 }
 
+pub fn moveCursor(self: *View, new_pos: XY(u32)) bool {
+    if (self.cursor_pos) |pos| {
+        if (pos.x == new_pos.x and pos.y == new_pos.y) return false;
+    }
+    self.cursor_pos = new_pos;
+    const view_cell_count = hook.getViewCellCount();
+    if (new_pos.y < self.viewport_pos.y) {
+        @panic("todo: move viewport up to cursor");
+    } else if (new_pos.y >= self.viewport_pos.y + view_cell_count.y) {
+        self.viewport_pos.y = new_pos.y - @divTrunc(view_cell_count.y, 2);
+    }
+    if (new_pos.x < self.viewport_pos.x or new_pos.x >= self.viewport_pos.x + view_cell_count.x) {
+        @panic("todo: move view to cursor");
+    }
+    return true;
+}
+
 // returns true if it was able to move the cursor backward
 pub fn cursorBack(self: *View) bool {
     if (self.cursor_pos) |*cursor_pos| {
@@ -161,11 +178,11 @@ pub fn cursorDown(self: *View) bool {
     if (self.cursor_pos) |*cursor_pos| {
         cursor_pos.y += 1;
 
-        const view_row_count = hook.getViewRowCount();
-        if (cursor_pos.y >= self.viewport_pos.y + view_row_count) {
+        const view_cell_count = hook.getViewCellCount();
+        if (cursor_pos.y >= self.viewport_pos.y + view_cell_count.y) {
             // NOTE: emacs will page down so the cursor is in the center, but,
             //       the user could just use control-l to do that so...?
-            self.viewport_pos.y = cursor_pos.y + 1 - view_row_count;
+            self.viewport_pos.y = cursor_pos.y + 1 - view_cell_count.y;
         }
         return true;
     }
@@ -219,11 +236,11 @@ pub fn @"cursor-file-end"(self: *View) bool {
         if (cursor_pos.y == last_row and cursor_pos.x == last_column) return false;
     }
     self.cursor_pos = .{ .x = @intCast(last_column), .y = @intCast(last_row) };
-    const view_row_count = hook.getViewRowCount();
-    if (view_row_count > last_row + 1) {
+    const view_cell_count = hook.getViewCellCount();
+    if (view_cell_count.y > last_row + 1) {
         self.viewport_pos.y = 0;
     } else {
-        self.viewport_pos.y = @intCast(last_row + 1 - view_row_count);
+        self.viewport_pos.y = @intCast(last_row + 1 - view_cell_count.y);
     }
     return true;
 }
@@ -232,8 +249,8 @@ pub fn @"scroll-to-cursor"(self: *View) bool {
     const cursor_pos = self.cursor_pos orelse return false;
 
     // for now we'll just center
-    const view_row_count = hook.getViewRowCount();
-    const half_row_count = @divTrunc(view_row_count, 2);
+    const view_cell_count = hook.getViewCellCount();
+    const half_row_count = @divTrunc(view_cell_count.y, 2);
 
     const new_viewport_y = blk: {
         if (cursor_pos.y <= half_row_count) break :blk 0;
@@ -251,10 +268,10 @@ pub fn @"page-up"(self: *View) bool {
         return false;
     }
 
-    const view_row_count = hook.getViewRowCount();
-    const page_line_count = switch (view_row_count) {
+    const view_cell_count = hook.getViewCellCount();
+    const page_line_count = switch (view_cell_count.y) {
         0...3 => 1,
-        else => view_row_count - 2,
+        else => view_cell_count.y - 2,
     };
 
     const new_viewport_y = if (self.viewport_pos.y > page_line_count)
@@ -265,7 +282,7 @@ pub fn @"page-up"(self: *View) bool {
     self.viewport_pos.y = new_viewport_y;
 
     if (self.cursor_pos) |*cursor_pos| {
-        const viewport_bottom = self.viewport_pos.y + view_row_count;
+        const viewport_bottom = self.viewport_pos.y + view_cell_count.y;
         if (cursor_pos.y >= viewport_bottom) {
             cursor_pos.y = viewport_bottom -| 1;
             if (cursor_pos.y >= self.rows.items.len and self.rows.items.len > 0) {
@@ -278,12 +295,12 @@ pub fn @"page-up"(self: *View) bool {
 }
 
 pub fn @"page-down"(self: *View) bool {
-    const view_row_count = hook.getViewRowCount();
-    const page_line_count = switch (view_row_count) {
+    const view_cell_count = hook.getViewCellCount();
+    const page_line_count = switch (view_cell_count.y) {
         0...3 => 1,
-        else => view_row_count - 2,
+        else => view_cell_count.y - 2,
     };
-    const max_viewport_top = if (self.rows.items.len >= view_row_count) self.rows.items.len - view_row_count else 0;
+    const max_viewport_top = if (self.rows.items.len >= view_cell_count.y) self.rows.items.len - view_cell_count.y else 0;
     if (self.viewport_pos.y == max_viewport_top) {
         std.log.info("page-down: already at end", .{});
         return false;
@@ -400,6 +417,50 @@ pub fn @"kill-line"(self: *View) bool {
         std.log.err("TODO: implement kill-line for a partial line", .{});
         return false;
     }
+}
+
+fn findString(self: *View, string: []const u8, start: XY(u32), end: XY(u32)) ?XY(u32) {
+    if (start.y >= self.rows.items.len) return null;
+
+    const y_start = blk: {
+        if (start.x != 0) {
+            const slice = self.rows.items[start.y].getSlice(self.file);
+            if (std.mem.indexOfPos(u8, slice, start.x, string)) |x| return .{ .x = @intCast(x), .y = start.y };
+            break :blk @min(self.rows.items.len, start.y + 1);
+        }
+        break :blk start.y;
+    };
+    const y_limit = @min(self.rows.items.len, blk: {
+        if (end.x != std.math.maxInt(u32)) {
+            break :blk if (end.y > 0) @max(end.y - 1, y_start) else 0;
+        }
+        break :blk end.y;
+    });
+    for (y_start..y_limit) |y| {
+        const slice = self.rows.items[y].getSlice(self.file);
+        if (std.mem.indexOf(u8, slice, string)) |x| return .{ .x = @intCast(x), .y = @intCast(y) };
+    }
+    if (end.x != std.math.maxInt(u32)) {
+        const slice = self.rows.items[y_limit].getSlice(self.file);
+        if (std.mem.indexOf(u8, slice[0..@min(end.x, slice.len)], string)) |x| return .{ .x = @intCast(x), .y = y_limit };
+    }
+
+    return null;
+}
+
+pub fn findStringFrom(self: *View, string: []const u8, from: XY(u32)) ?XY(u32) {
+    std.debug.assert(string.len > 0);
+    if (self.findString(
+        string,
+        from,
+        .{ .x = std.math.maxInt(u32), .y = @intCast(self.rows.items.len) },
+    )) |match| return match;
+    if (from.y > 0 or from.y > 0) return self.findString(
+        string,
+        .{ .x = 0, .y = 0 },
+        .{ .x = @intCast(from.x + string.len - 1), .y = from.y },
+    );
+    return null;
 }
 
 pub fn hasChanges(self: *View, normalized: *bool) bool {

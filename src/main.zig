@@ -276,7 +276,12 @@ fn paint(d: *const zin.Draw(.{ .static = .main })) void {
     d.clear();
     const dpi = getDpi(d);
     const font_size = getFontSize(i32, dpi, &global.platform);
-    const status_top = client_size.y - font_size.y;
+
+    const main_status_top = client_size.y - font_size.y;
+    const search_top = switch (engine.global_mode) {
+        .normal => main_status_top,
+        .search => main_status_top - font_size.y,
+    };
 
     const old_font = blk: switch (zin.platform_kind) {
         .win32 => break :blk win32.SelectObject(
@@ -292,7 +297,7 @@ fn paint(d: *const zin.Draw(.{ .static = .main })) void {
 
     const viewport_size: XY(usize) = .{
         .x = @intCast(@divTrunc(client_size.x, font_size.x)),
-        .y = @intCast(@divTrunc(status_top, font_size.y)),
+        .y = @intCast(@divTrunc(search_top, font_size.y)),
     };
 
     switch (engine.global_current_pane) {
@@ -337,7 +342,7 @@ fn paint(d: *const zin.Draw(.{ .static = .main })) void {
 
     d.rect(.{
         .left = 0,
-        .top = status_top,
+        .top = main_status_top,
         .right = client_size.x,
         .bottom = client_size.y,
     }, theme.bg_status);
@@ -348,7 +353,7 @@ fn paint(d: *const zin.Draw(.{ .static = .main })) void {
             }
             break :blk engine.global_status.slice();
         };
-        d.text(status_text, 0, status_top, theme.fg_status);
+        d.text(status_text, 0, main_status_top, theme.fg_status);
     }
 
     if (engine.global_open_file_prompt) |*prompt| {
@@ -363,6 +368,22 @@ fn paint(d: *const zin.Draw(.{ .static = .main })) void {
         const path = prompt.getPathConst();
         d.text(path, 0, 1 * font_size.y, theme.fg);
     }
+
+    switch (engine.global_mode) {
+        .normal => {},
+        .search => |*search| {
+            d.rect(.{
+                .left = 0,
+                .top = search_top,
+                .right = client_size.x,
+                .bottom = main_status_top,
+            }, theme.bg_status);
+            var text_buf: [30 + engine.max_search]u8 = undefined;
+            const text = std.fmt.bufPrint(&text_buf, "search: {s}", .{search.buffer.slice()}) catch unreachable;
+            d.text(text, 0, search_top, theme.fg_status);
+        },
+    }
+
     if (engine.global_err_msg) |err_msg| {
         d.rect(.{
             .left = 0,
@@ -498,18 +519,21 @@ pub fn beep() void {
     }
 }
 
-pub fn getViewRowCount() u32 {
+pub fn getViewCellCount() XY(u32) {
     const client_size = zin.staticWindow(.main).getClientSize();
-    const font_height = blk: switch (zin.platform_kind) {
+    const font_size = blk: switch (zin.platform_kind) {
         .win32 => {
             const dpi = win32.dpiFromHwnd(zin.staticWindow(.main).hwnd());
-            break :blk getFontSize(i32, dpi, &global.platform).y;
+            break :blk getFontSize(i32, dpi, &global.platform);
         },
-        .x11 => global.platform.font_size.?.y,
+        .x11 => global.platform.font_size.?,
         .macos => @panic("todo"),
     };
-    const status_top = client_size.y - font_height;
-    return @intCast(@divTrunc(status_top, font_height));
+    const status_top = client_size.y - font_size.y;
+    return .{
+        .x = @intCast(@divTrunc(client_size.x, font_size.x)),
+        .y = @intCast(@divTrunc(status_top, font_size.y)),
+    };
 }
 
 pub fn addHandle(handle: win32.HANDLE, cb: HandleCallback) bool {
