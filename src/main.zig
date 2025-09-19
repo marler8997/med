@@ -466,6 +466,14 @@ fn requestFontSizeX11(gc: x11.GraphicsContext) !zin.XY {
     };
 }
 
+// For macOS, we'll use a default monospace font size
+// Helvetica 12pt typically has these dimensions
+// TODO: Actually query the font metrics from Core Text or NSFont
+const macos_hardcoded_text_size: zin.XY = .{
+    .x = 7, // Average character width for Helvetica 12pt
+    .y = 14, // Line height for Helvetica 12pt
+};
+
 fn getFontSize(comptime T: type, dpi: u32, globals: *PlatformGlobals) if (T == i32) zin.XY else XY(T) {
     switch (zin.platform_kind) {
         .x11 => return global.platform.font_size.?,
@@ -493,15 +501,7 @@ fn getFontSize(comptime T: type, dpi: u32, globals: *PlatformGlobals) if (T == i
                 .y = @intCast(metrics.tmHeight),
             };
         },
-        .macos => {
-            // For macOS, we'll use a default monospace font size
-            // Helvetica 12pt typically has these dimensions
-            // TODO: Actually query the font metrics from Core Text or NSFont
-            return .{
-                .x = 7,  // Average character width for Helvetica 12pt
-                .y = 14, // Line height for Helvetica 12pt
-            };
-        },
+        .macos => return macos_hardcoded_text_size,
     }
 }
 
@@ -535,7 +535,7 @@ pub fn getViewCellCount() XY(u32) {
             break :blk getFontSize(i32, dpi, &global.platform);
         },
         .x11 => global.platform.font_size.?,
-        .macos => @panic("todo"),
+        .macos => macos_hardcoded_text_size,
     };
     const status_top = client_size.y - font_size.y;
     return .{
