@@ -493,7 +493,15 @@ fn getFontSize(comptime T: type, dpi: u32, globals: *PlatformGlobals) if (T == i
                 .y = @intCast(metrics.tmHeight),
             };
         },
-        .macos => @panic("getFontSize not implemented on macos"),
+        .macos => {
+            // For macOS, we'll use a default monospace font size
+            // Helvetica 12pt typically has these dimensions
+            // TODO: Actually query the font metrics from Core Text or NSFont
+            return .{
+                .x = 7,  // Average character width for Helvetica 12pt
+                .y = 14, // Line height for Helvetica 12pt
+            };
+        },
     }
 }
 
