@@ -6,8 +6,8 @@
 
     .dependencies = .{
         .zin = .{
-            .url = "git+https://github.com/marler8997/zin#c834bf6172b4d50478e20d00d00810275f3a197b",
-            .hash = "zin-0.0.0-W7QDxzXHAgCOlKyAYtXL3OyKeDR6oTt37T4HuvOpbax3",
+            .url = "git+https://github.com/marler8997/zin#4487b6c325e66f1e167d3409e58be40453d09be1",
+            .hash = "zin-0.0.0-W7QDx-LlAgCsrRt1Wb_ohR_4Gs5Zb471TcguK7jDdAHC",
         },
         .aro = .{
             .url = "git+https://github.com/Vexu/arocc.git#dc5d3c41ae31d8ac24982571e7fc1e267516cc68",

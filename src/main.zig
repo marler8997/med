@@ -648,9 +648,9 @@ fn onKey(e: zin.Key) void {
             .control = e.x11_mask.control,
             .alt = global.platform.alt_left_down or global.platform.alt_right_down,
         },
-        else => {
-            std.log.err("TODO: get keyboard mods on this platform!!!", .{});
-            break :blk .{ .control = false, .alt = false };
+        .macos => break :blk .{
+            .control = e.macos_mods.control,
+            .alt = e.macos_mods.option,
         },
     };
     if (keyFromZin(e.vk, e.win32_extended)) |key| {
